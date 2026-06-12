@@ -1,194 +1,134 @@
-name: OrangeFox Recovery Builder - v2.0
+name: OrangeFox Recovery Builder
 
 on:
   workflow_dispatch:
     inputs:
       MANIFEST_BRANCH:
-        description: 'Rama de OrangeFox a usar'
+        description: Rama de OrangeFox
         required: true
-        default: 'OrangeFox-12.1'
+        default: OrangeFox-12.1
         type: choice
         options:
           - OrangeFox-12.1
           - OrangeFox-11
           - fox_14.1
-          - fox_13.0
-          - snake-12.1
-      
       DEVICE_TREE_URL:
-        description: 'URL del arbol de recuperacion'
+        description: URL del arbol
         required: true
         type: string
-        default: 'https://github.com/kinguser981/cap_sprout_oran'
-      
       DEVICE_TREE_BRANCH:
-        description: 'Rama del arbol del dispositivo'
+        description: Rama del arbol
         required: true
         type: string
-        default: 'OrangeFox-12.1'
-      
       DEVICE_PATH:
-        description: 'Ruta del dispositivo'
+        description: Ruta del dispositivo
         required: true
         type: string
-        default: 'device/nokia/cap_sprout'
-      
       DEVICE_CODENAME:
-        description: 'Codename del dispositivo'
+        description: Codename
         required: true
         type: string
-        default: 'cap_sprout'
-      
       DEVICE_MAKEFILE:
-        description: 'Nombre del Makefile'
+        description: Makefile
         required: true
         type: string
-        default: 'fox_cap_sprout.mk'
-      
       BUILD_TARGET:
-        description: 'Que compilar'
+        description: Objetivo
         required: true
-        default: 'recovery'
+        default: recovery
         type: choice
         options:
           - recovery
           - boot
-          - vendor_boot
-      
       RECOVERY_INSTALLER:
-        description: 'Crear ZIP instalador'
+        description: Crear ZIP
         required: false
         type: boolean
         default: true
-      
-      RECOVERY_TAR:
-        description: 'Crear TAR (Samsung)'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
 
     steps:
-      - name: "Checkout"
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: "Mostrar Parametros"
+      - name: Setup
         run: |
-          echo ""
-          echo "OrangeFox Recovery Builder v2.0"
-          echo "================================"
-          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
-          echo "Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
-          echo ""
+          git config --global user.email "builder@github.com"
+          git config --global user.name "Builder"
+          mkdir -p ~/build
 
-      - name: "Instalar Dependencias"
+      - name: Install Dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libsdl1.2-dev libssl-dev libtinfo5 libxml2 libxml2-utils lz4 pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev 2>&1 | tail -5
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libsdl1.2-dev libssl-dev libtinfo5 libxml2 libxml2-utils lz4 pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev
 
-      - name: "Configurar Git"
+      - name: Download Repo
         run: |
-          git config --global user.email "${{ github.actor }}@github.com"
-          git config --global user.name "${{ github.actor }}"
-          mkdir -p ~/orangefox_build
+          mkdir -p ~/build/bin
+          curl --progress-bar https://storage.googleapis.com/git-repo-downloads/repo > ~/build/bin/repo
+          chmod a+x ~/build/bin/repo
 
-      - name: "Descargar Repo"
+      - name: Initialize Repo
         run: |
-          mkdir -p ~/orangefox_build/bin
-          curl --progress-bar https://storage.googleapis.com/git-repo-downloads/repo > ~/orangefox_build/bin/repo
-          chmod a+x ~/orangefox_build/bin/repo
-
-      - name: "Inicializar"
-        run: |
-          export PATH=~/orangefox_build/bin:$PATH
-          cd ~/orangefox_build
+          export PATH=~/build/bin:$PATH
+          cd ~/build
           ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q
 
-      - name: "Sincronizar"
+      - name: Sync Repo
         timeout-minutes: 120
         continue-on-error: true
         run: |
-          export PATH=~/orangefox_build/bin:$PATH
-          cd ~/orangefox_build
-          ./bin/repo sync -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20
+          export PATH=~/build/bin:$PATH
+          cd ~/build
+          ./bin/repo sync -j8 -c --no-tags --no-clone-bundle --force-sync
 
-      - name: "Clonar Arbol"
+      - name: Clone Device Tree
         run: |
-          cd ~/orangefox_build
+          cd ~/build
           DEVICE_DIR="${{ github.event.inputs.DEVICE_PATH }}"
           mkdir -p "$(dirname "$DEVICE_DIR")"
-          git clone -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} --depth=1 "${{ github.event.inputs.DEVICE_TREE_URL }}" "$DEVICE_DIR" 2>&1 | tail -5
+          git clone -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} --depth=1 "${{ github.event.inputs.DEVICE_TREE_URL }}" "$DEVICE_DIR"
 
-      - name: "Compilar"
+      - name: Build Recovery
         timeout-minutes: 300
         run: |
-          cd ~/orangefox_build
-          source build/envsetup.sh > /dev/null 2>&1 || true
-          lunch fox_${{ github.event.inputs.DEVICE_CODENAME }}-user > /dev/null 2>&1 || true
-          make clean > /dev/null 2>&1 || true
-          make -j$(nproc --all) ${{ github.event.inputs.BUILD_TARGET }} 2>&1 | tee build.log
+          cd ~/build
+          source build/envsetup.sh || true
+          lunch fox_${{ github.event.inputs.DEVICE_CODENAME }}-user || true
+          make clean || true
+          make -j$(nproc --all) ${{ github.event.inputs.BUILD_TARGET }}
 
-      - name: "Localizar Recovery"
-        id: find_recovery
+      - name: Find Recovery
+        id: recovery
         run: |
-          cd ~/orangefox_build
+          cd ~/build
           RECOVERY=$(find out -name "recovery.img" -type f 2>/dev/null | head -1)
           if [ -z "$RECOVERY" ]; then
             RECOVERY=$(find out -name "*RECOVERY*.img" -type f 2>/dev/null | head -1)
           fi
           if [ -n "$RECOVERY" ]; then
-            MD5=$(md5sum "$RECOVERY" | awk '{print $1}')
-            echo "recovery_file=$RECOVERY" >> $GITHUB_OUTPUT
-            echo "recovery_md5=$MD5" >> $GITHUB_OUTPUT
+            echo "path=$RECOVERY" >> $GITHUB_OUTPUT
           else
             exit 1
           fi
 
-      - name: "Artefactos"
+      - name: Prepare Artifacts
         run: |
-          cd ~/orangefox_build
+          cd ~/build
           mkdir -p artifacts
-          RECOVERY="${{ steps.find_recovery.outputs.recovery_file }}"
-          if [ -f "$RECOVERY" ]; then
-            cp "$RECOVERY" artifacts/recovery.img
-          fi
-          if [ "${{ github.event.inputs.RECOVERY_TAR }}" == "true" ]; then
-            cd artifacts && tar -cf recovery.tar recovery.img && rm recovery.img && cd ..
-          fi
-          if [ "${{ github.event.inputs.RECOVERY_INSTALLER }}" == "true" ]; then
-            mkdir -p installer/META-INF/com/google/android
-            echo "Package installed" > installer/META-INF/com/google/android/updater-script
-            cp artifacts/recovery.img installer/recovery.img 2>/dev/null
-            cd installer && zip -r ../artifacts/recovery-installer.zip . -q && cd ..
-          fi
-          ls -lh artifacts/
+          cp ${{ steps.recovery.outputs.path }} artifacts/recovery.img
 
-      - name: "Publicar Releases"
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ~/orangefox_build/artifacts/*
+          files: ~/build/artifacts/recovery.img
           tag_name: orangefox-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.run_number }}
           body: "OrangeFox Recovery Build"
           draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
-
-      - name: "Resumen"
-        if: always()
-        run: |
-          echo ""
-          echo "BUILD COMPLETADO"
-          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
-          echo "Estado: OK"
-          echo ""
