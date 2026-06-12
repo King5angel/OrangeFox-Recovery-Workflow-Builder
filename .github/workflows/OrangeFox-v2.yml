@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       MANIFEST_BRANCH:
-        description: '🌳 Rama de OrangeFox a usar'
+        description: 'Rama de OrangeFox a usar'
         required: true
         default: 'OrangeFox-12.1'
         type: choice
@@ -16,37 +16,37 @@ on:
           - snake-12.1
       
       DEVICE_TREE_URL:
-        description: '📱 URL del árbol de recuperación (GitHub)'
+        description: 'URL del arbol de recuperacion'
         required: true
         type: string
         default: 'https://github.com/kinguser981/cap_sprout_oran'
       
       DEVICE_TREE_BRANCH:
-        description: '🔀 Rama del árbol del dispositivo'
+        description: 'Rama del arbol del dispositivo'
         required: true
         type: string
         default: 'OrangeFox-12.1'
       
       DEVICE_PATH:
-        description: '📂 Ruta del dispositivo (device/marca/modelo)'
+        description: 'Ruta del dispositivo'
         required: true
         type: string
         default: 'device/nokia/cap_sprout'
       
       DEVICE_CODENAME:
-        description: '🏷️ Codename del dispositivo'
+        description: 'Codename del dispositivo'
         required: true
         type: string
         default: 'cap_sprout'
       
       DEVICE_MAKEFILE:
-        description: '⚙️ Nombre del Makefile'
+        description: 'Nombre del Makefile'
         required: true
         type: string
         default: 'fox_cap_sprout.mk'
       
       BUILD_TARGET:
-        description: '🎯 Qué compilar'
+        description: 'Que compilar'
         required: true
         default: 'recovery'
         type: choice
@@ -56,13 +56,13 @@ on:
           - vendor_boot
       
       RECOVERY_INSTALLER:
-        description: '📦 Crear ZIP instalador'
+        description: 'Crear ZIP instalador'
         required: false
         type: boolean
         default: true
       
       RECOVERY_TAR:
-        description: '🎁 Crear TAR (Samsung)'
+        description: 'Crear TAR (Samsung)'
         required: false
         type: boolean
         default: false
@@ -75,40 +75,38 @@ jobs:
       packages: write
 
     steps:
-      - name: "📥 Checkout del Repositorio"
+      - name: "Checkout del Repositorio"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "🎬 Mostrar Parámetros"
+      - name: "Mostrar Parametros"
         run: |
           echo ""
-          echo "╔════════════════════════════════════════════════════════╗"
-          echo "║   🔨 OrangeFox Recovery Builder v2.0 - NEW BUILD 🆕   ║"
-          echo "╚════════════════════════════════════════════════════════╝"
+          echo "========== OrangeFox Recovery Builder v2.0 =========="
           echo ""
-          echo "📱 DISPOSITIVO:"
+          echo "DISPOSITIVO:"
           echo "   Codename: ${{ github.event.inputs.DEVICE_CODENAME }}"
           echo "   Ruta: ${{ github.event.inputs.DEVICE_PATH }}"
           echo "   Makefile: ${{ github.event.inputs.DEVICE_MAKEFILE }}"
           echo ""
-          echo "🌳 OrangeFox:"
+          echo "OrangeFox:"
           echo "   Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "   Árbol: ${{ github.event.inputs.DEVICE_TREE_URL }}"
-          echo "   Rama del árbol: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
+          echo "   Arbol: ${{ github.event.inputs.DEVICE_TREE_URL }}"
+          echo "   Rama del arbol: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
           echo ""
-          echo "🎯 COMPILACIÓN:"
+          echo "COMPILACION:"
           echo "   Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
           echo "   Instalador: ${{ github.event.inputs.RECOVERY_INSTALLER }}"
           echo "   TAR (Samsung): ${{ github.event.inputs.RECOVERY_TAR }}"
           echo ""
 
-      - name: "🔧 Instalar Dependencias"
+      - name: "Instalar Dependencias"
         run: |
-          echo "📦 Actualizando lista de paquetes..."
+          echo "Actualizando lista de paquetes..."
           sudo apt-get update -qq
           
-          echo "📦 Instalando dependencias..."
+          echo "Instalando dependencias..."
           sudo apt-get install -y \
             bc bison build-essential ccache curl flex g++-multilib \
             gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev \
@@ -117,59 +115,59 @@ jobs:
             squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev \
             android-tools-adb android-tools-fastboot simg2img 2>&1 | tail -5
           
-          echo "✅ Dependencias instaladas"
+          echo "Dependencias instaladas"
 
-      - name: "🔐 Configurar Git"
+      - name: "Configurar Git"
         run: |
           git config --global user.email "${{ github.actor }}@github.com"
           git config --global user.name "${{ github.actor }}"
           mkdir -p ~/orangefox_build
-          echo "✅ Git configurado"
+          echo "Git configurado"
 
-      - name: "🏗️ Descargar Herramienta Repo"
+      - name: "Descargar Herramienta Repo"
         run: |
           mkdir -p ~/orangefox_build/bin
           export PATH=~/orangefox_build/bin:$PATH
           
-          echo "⬇️ Descargando repo..."
+          echo "Descargando repo..."
           curl --progress-bar https://storage.googleapis.com/git-repo-downloads/repo > ~/orangefox_build/bin/repo
           chmod a+x ~/orangefox_build/bin/repo
-          echo "✅ Repo descargado"
+          echo "Repo descargado"
 
-      - name: "📡 Inicializar Repositorio"
+      - name: "Inicializar Repositorio"
         run: |
           export PATH=~/orangefox_build/bin:$PATH
           cd ~/orangefox_build
           
-          echo "🔄 Inicializando OrangeFox manifest..."
+          echo "Inicializando OrangeFox manifest..."
           ./bin/repo init \
             -u https://github.com/OrangeFoxRecovery/manifest.git \
             -b ${{ github.event.inputs.MANIFEST_BRANCH }} \
             --depth=1 -q
           
-          echo "✅ Manifest inicializado"
+          echo "Manifest inicializado"
 
-      - name: "⏳ Sincronizar Repositorio (30-60 min)"
+      - name: "Sincronizar Repositorio"
         timeout-minutes: 120
         continue-on-error: true
         run: |
           export PATH=~/orangefox_build/bin:$PATH
           cd ~/orangefox_build
           
-          echo "🔄 Sincronizando (esto puede tardar...)..."
+          echo "Sincronizando..."
           ./bin/repo sync \
             -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20
           
-          echo "✅ Sincronización completada"
+          echo "Sincronizacion completada"
 
-      - name: "🌳 Clonar Árbol del Dispositivo"
+      - name: "Clonar Arbol del Dispositivo"
         run: |
           cd ~/orangefox_build
           
           DEVICE_DIR="${{ github.event.inputs.DEVICE_PATH }}"
           mkdir -p "$(dirname "$DEVICE_DIR")"
           
-          echo "📥 Clonando árbol del dispositivo..."
+          echo "Clonando arbol del dispositivo..."
           git clone \
             -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} \
             --depth=1 \
@@ -177,46 +175,42 @@ jobs:
             "$DEVICE_DIR" 2>&1 | tail -10
           
           if [ -d "$DEVICE_DIR" ]; then
-            echo "✅ Árbol clonado correctamente"
+            echo "Arbol clonado correctamente"
           else
-            echo "❌ Error al clonar árbol"
+            echo "Error al clonar arbol"
             exit 1
           fi
 
-      - name: "🔍 Verificar Archivos Críticos"
+      - name: "Verificar Archivos Criticos"
         continue-on-error: true
         run: |
           cd ~/orangefox_build
           DEVICE_PATH="${{ github.event.inputs.DEVICE_PATH }}"
           
-          echo "📋 Verificando archivos críticos..."
+          echo "Verificando archivos criticos..."
           echo ""
           
-          [ -f "$DEVICE_PATH/BoardConfig.mk" ] && echo "✅ BoardConfig.mk" || echo "⚠️ BoardConfig.mk no encontrado"
-          [ -f "$DEVICE_PATH/device.mk" ] && echo "✅ device.mk" || echo "⚠️ device.mk no encontrado"
-          [ -f "$DEVICE_PATH/Android.mk" ] && echo "✅ Android.mk" || echo "⚠️ Android.mk no encontrado"
-          
-          FSTAB=$(find "$DEVICE_PATH" -name "recovery.fstab" 2>/dev/null | head -1)
-          [ -n "$FSTAB" ] && echo "✅ recovery.fstab" || echo "⚠️ recovery.fstab no encontrado"
+          [ -f "$DEVICE_PATH/BoardConfig.mk" ] && echo "OK: BoardConfig.mk" || echo "FALTA: BoardConfig.mk"
+          [ -f "$DEVICE_PATH/device.mk" ] && echo "OK: device.mk" || echo "FALTA: device.mk"
+          [ -f "$DEVICE_PATH/Android.mk" ] && echo "OK: Android.mk" || echo "FALTA: Android.mk"
 
-      - name: "⚙️ Compilar Recovery"
+      - name: "Compilar Recovery"
         timeout-minutes: 300
         run: |
           cd ~/orangefox_build
           
-          echo "🔨 Iniciando compilación..."
+          echo "Iniciando compilacion..."
           echo "Memoria disponible: $(free -h | grep Mem | awk '{print $7}')"
           echo "CPUs: $(nproc --all)"
           echo ""
           
           source build/envsetup.sh > /dev/null 2>&1 || true
           
-          echo "🍽️ Lunch: fox_${{ github.event.inputs.DEVICE_CODENAME }}-user"
           lunch fox_${{ github.event.inputs.DEVICE_CODENAME }}-user > /dev/null 2>&1 || true
           
           make clean > /dev/null 2>&1 || true
           
-          echo "🔨 Compilando ${{ github.event.inputs.BUILD_TARGET }}..."
+          echo "Compilando ${{ github.event.inputs.BUILD_TARGET }}..."
           START=$(date +%s)
           
           make -j$(nproc --all) ${{ github.event.inputs.BUILD_TARGET }} 2>&1 | tee build.log
@@ -229,19 +223,19 @@ jobs:
           
           echo ""
           if [ $RESULT -eq 0 ]; then
-            echo "✅ COMPILACIÓN EXITOSA en ${MINUTOS}m ${SEGUNDOS}s"
+            echo "COMPILACION EXITOSA en ${MINUTOS}m ${SEGUNDOS}s"
           else
-            echo "❌ COMPILACIÓN FALLIDA"
+            echo "COMPILACION FALLIDA"
             tail -50 build.log
             exit 1
           fi
 
-      - name: "🔎 Localizar Recovery Compilado"
+      - name: "Localizar Recovery Compilado"
         id: find_recovery
         run: |
           cd ~/orangefox_build
           
-          echo "🔍 Buscando archivo de recovery..."
+          echo "Buscando archivo de recovery..."
           
           RECOVERY=$(find out -name "recovery.img" -type f 2>/dev/null | head -1)
           
@@ -253,18 +247,18 @@ jobs:
             SIZE=$(du -h "$RECOVERY" | cut -f1)
             MD5=$(md5sum "$RECOVERY" | awk '{print $1}')
             
-            echo "✅ Recovery encontrado"
-            echo "📊 Tamaño: $SIZE"
-            echo "🔐 MD5: $MD5"
+            echo "Recovery encontrado"
+            echo "Tamano: $SIZE"
+            echo "MD5: $MD5"
             
             echo "recovery_file=$RECOVERY" >> $GITHUB_OUTPUT
             echo "recovery_md5=$MD5" >> $GITHUB_OUTPUT
           else
-            echo "❌ Recovery no encontrado"
+            echo "Recovery no encontrado"
             exit 1
           fi
 
-      - name: "📦 Preparar Artefactos"
+      - name: "Preparar Artefactos"
         run: |
           cd ~/orangefox_build
           mkdir -p artifacts
@@ -273,7 +267,7 @@ jobs:
           
           if [ -f "$RECOVERY" ]; then
             cp "$RECOVERY" artifacts/recovery.img
-            echo "✅ recovery.img copiado"
+            echo "recovery.img copiado"
           fi
           
           if [ "${{ github.event.inputs.RECOVERY_TAR }}" == "true" ]; then
@@ -281,7 +275,7 @@ jobs:
             tar -cf recovery.tar recovery.img
             rm recovery.img
             cd ..
-            echo "✅ recovery.tar creado (Samsung)"
+            echo "recovery.tar creado (Samsung)"
           fi
           
           if [ "${{ github.event.inputs.RECOVERY_INSTALLER }}" == "true" ]; then
@@ -297,56 +291,44 @@ EOF
             cd installer
             zip -r ../artifacts/recovery-installer.zip . -q
             cd ..
-            echo "✅ recovery-installer.zip creado"
+            echo "recovery-installer.zip creado"
           fi
           
           echo ""
-          echo "📦 Archivos generados:"
+          echo "Archivos generados:"
           ls -lh artifacts/
 
-      - name: "📝 Crear Notas de Lanzamiento"
+      - name: "Crear Notas de Lanzamiento"
         id: notes
         run: |
           cat > /tmp/release_notes.md << 'EOF'
-          # 🎉 OrangeFox Recovery - Build Automático
+          # OrangeFox Recovery - Build Automatico
           
-          ## 📋 Información del Build
+          ## Informacion del Build
           
-          - **Fecha:** $(date)
-          - **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
-          - **Rama:** ${{ github.event.inputs.MANIFEST_BRANCH }}
-          - **Build #:** ${{ github.run_number }}
+          - Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}
+          - Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}
+          - Build: ${{ github.run_number }}
           
-          ## 📱 Especificaciones
+          ## Especificaciones
           
-          | Parámetro | Valor |
+          | Parametro | Valor |
           |-----------|-------|
           | Codename | ${{ github.event.inputs.DEVICE_CODENAME }} |
           | Ruta | ${{ github.event.inputs.DEVICE_PATH }} |
           | Makefile | ${{ github.event.inputs.DEVICE_MAKEFILE }} |
           | Objetivo | ${{ github.event.inputs.BUILD_TARGET }} |
           
-          ## 🌳 Árbol
+          ## Arbol
           
-          - **URL:** ${{ github.event.inputs.DEVICE_TREE_URL }}
-          - **Rama:** ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
+          - URL: ${{ github.event.inputs.DEVICE_TREE_URL }}
+          - Rama: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
           
-          ## 📦 Archivos Incluidos
+          ## Archivos Incluidos
           
-          - ✅ recovery.img
-          EOF
+          - recovery.img
           
-          if [ -f "~/orangefox_build/artifacts/recovery.tar" ]; then
-            echo "- ✅ recovery.tar" >> /tmp/release_notes.md
-          fi
-          
-          if [ -f "~/orangefox_build/artifacts/recovery-installer.zip" ]; then
-            echo "- ✅ recovery-installer.zip" >> /tmp/release_notes.md
-          fi
-          
-          cat >> /tmp/release_notes.md << 'EOF'
-          
-          ## 🚀 Instalación
+          ## Instalacion
           
           ### Fastboot (Recomendado)
           ```bash
@@ -361,10 +343,10 @@ EOF
           adb sideload recovery-installer.zip
           ```
           
-          ✨ ¡Build compilado automáticamente! ✨
+          Build compilado automaticamente!
           EOF
 
-      - name: "📤 Publicar en Releases"
+      - name: "Publicar en Releases"
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -377,24 +359,22 @@ EOF
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: "✨ Resumen Final"
+      - name: "Resumen Final"
         if: always()
         run: |
           echo ""
-          echo "╔════════════════════════════════════════════════════════╗"
-          echo "║                   🎉 BUILD COMPLETADO 🎉              ║"
-          echo "╚════════════════════════════════════════════════════════╝"
+          echo "========== BUILD COMPLETADO =========="
           echo ""
-          echo "📱 Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
-          echo "🌳 Rama OrangeFox: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "🎯 Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
-          echo "📦 Build #: ${{ github.run_number }}"
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
+          echo "Rama OrangeFox: ${{ github.event.inputs.MANIFEST_BRANCH }}"
+          echo "Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
+          echo "Build: ${{ github.run_number }}"
           echo ""
-          echo "📍 Próximos pasos:"
+          echo "Proximos pasos:"
           echo "   1. Ve a: Releases"
           echo "   2. Selecciona tu build"
           echo "   3. Descarga: recovery.img"
           echo "   4. Flashea en tu dispositivo"
           echo ""
-          echo "✨ ¡Tu OrangeFox Recovery está listo! ✨"
+          echo "Tu OrangeFox Recovery esta listo!"
           echo ""
