@@ -75,7 +75,7 @@ jobs:
       packages: write
 
     steps:
-      - name: "Checkout del Repositorio"
+      - name: "Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -83,298 +83,112 @@ jobs:
       - name: "Mostrar Parametros"
         run: |
           echo ""
-          echo "========== OrangeFox Recovery Builder v2.0 =========="
-          echo ""
-          echo "DISPOSITIVO:"
-          echo "   Codename: ${{ github.event.inputs.DEVICE_CODENAME }}"
-          echo "   Ruta: ${{ github.event.inputs.DEVICE_PATH }}"
-          echo "   Makefile: ${{ github.event.inputs.DEVICE_MAKEFILE }}"
-          echo ""
-          echo "OrangeFox:"
-          echo "   Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "   Arbol: ${{ github.event.inputs.DEVICE_TREE_URL }}"
-          echo "   Rama del arbol: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
-          echo ""
-          echo "COMPILACION:"
-          echo "   Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
-          echo "   Instalador: ${{ github.event.inputs.RECOVERY_INSTALLER }}"
-          echo "   TAR (Samsung): ${{ github.event.inputs.RECOVERY_TAR }}"
+          echo "OrangeFox Recovery Builder v2.0"
+          echo "================================"
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
+          echo "Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
+          echo "Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
           echo ""
 
       - name: "Instalar Dependencias"
         run: |
-          echo "Actualizando lista de paquetes..."
           sudo apt-get update -qq
-          
-          echo "Instalando dependencias..."
-          sudo apt-get install -y \
-            bc bison build-essential ccache curl flex g++-multilib \
-            gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev \
-            lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libsdl1.2-dev \
-            libssl-dev libtinfo5 libxml2 libxml2-utils lz4 pngcrush rsync schedtool \
-            squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev \
-            android-tools-adb android-tools-fastboot simg2img 2>&1 | tail -5
-          
-          echo "Dependencias instaladas"
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libsdl1.2-dev libssl-dev libtinfo5 libxml2 libxml2-utils lz4 pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev 2>&1 | tail -5
 
       - name: "Configurar Git"
         run: |
           git config --global user.email "${{ github.actor }}@github.com"
           git config --global user.name "${{ github.actor }}"
           mkdir -p ~/orangefox_build
-          echo "Git configurado"
 
-      - name: "Descargar Herramienta Repo"
+      - name: "Descargar Repo"
         run: |
           mkdir -p ~/orangefox_build/bin
-          export PATH=~/orangefox_build/bin:$PATH
-          
-          echo "Descargando repo..."
           curl --progress-bar https://storage.googleapis.com/git-repo-downloads/repo > ~/orangefox_build/bin/repo
           chmod a+x ~/orangefox_build/bin/repo
-          echo "Repo descargado"
 
-      - name: "Inicializar Repositorio"
+      - name: "Inicializar"
         run: |
           export PATH=~/orangefox_build/bin:$PATH
           cd ~/orangefox_build
-          
-          echo "Inicializando OrangeFox manifest..."
-          ./bin/repo init \
-            -u https://github.com/OrangeFoxRecovery/manifest.git \
-            -b ${{ github.event.inputs.MANIFEST_BRANCH }} \
-            --depth=1 -q
-          
-          echo "Manifest inicializado"
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q
 
-      - name: "Sincronizar Repositorio"
+      - name: "Sincronizar"
         timeout-minutes: 120
         continue-on-error: true
         run: |
           export PATH=~/orangefox_build/bin:$PATH
           cd ~/orangefox_build
-          
-          echo "Sincronizando..."
-          ./bin/repo sync \
-            -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20
-          
-          echo "Sincronizacion completada"
+          ./bin/repo sync -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20
 
-      - name: "Clonar Arbol del Dispositivo"
+      - name: "Clonar Arbol"
         run: |
           cd ~/orangefox_build
-          
           DEVICE_DIR="${{ github.event.inputs.DEVICE_PATH }}"
           mkdir -p "$(dirname "$DEVICE_DIR")"
-          
-          echo "Clonando arbol del dispositivo..."
-          git clone \
-            -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} \
-            --depth=1 \
-            "${{ github.event.inputs.DEVICE_TREE_URL }}" \
-            "$DEVICE_DIR" 2>&1 | tail -10
-          
-          if [ -d "$DEVICE_DIR" ]; then
-            echo "Arbol clonado correctamente"
-          else
-            echo "Error al clonar arbol"
-            exit 1
-          fi
+          git clone -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} --depth=1 "${{ github.event.inputs.DEVICE_TREE_URL }}" "$DEVICE_DIR" 2>&1 | tail -5
 
-      - name: "Verificar Archivos Criticos"
-        continue-on-error: true
-        run: |
-          cd ~/orangefox_build
-          DEVICE_PATH="${{ github.event.inputs.DEVICE_PATH }}"
-          
-          echo "Verificando archivos criticos..."
-          echo ""
-          
-          [ -f "$DEVICE_PATH/BoardConfig.mk" ] && echo "OK: BoardConfig.mk" || echo "FALTA: BoardConfig.mk"
-          [ -f "$DEVICE_PATH/device.mk" ] && echo "OK: device.mk" || echo "FALTA: device.mk"
-          [ -f "$DEVICE_PATH/Android.mk" ] && echo "OK: Android.mk" || echo "FALTA: Android.mk"
-
-      - name: "Compilar Recovery"
+      - name: "Compilar"
         timeout-minutes: 300
         run: |
           cd ~/orangefox_build
-          
-          echo "Iniciando compilacion..."
-          echo "Memoria disponible: $(free -h | grep Mem | awk '{print $7}')"
-          echo "CPUs: $(nproc --all)"
-          echo ""
-          
           source build/envsetup.sh > /dev/null 2>&1 || true
-          
           lunch fox_${{ github.event.inputs.DEVICE_CODENAME }}-user > /dev/null 2>&1 || true
-          
           make clean > /dev/null 2>&1 || true
-          
-          echo "Compilando ${{ github.event.inputs.BUILD_TARGET }}..."
-          START=$(date +%s)
-          
           make -j$(nproc --all) ${{ github.event.inputs.BUILD_TARGET }} 2>&1 | tee build.log
-          RESULT=$?
-          
-          END=$(date +%s)
-          TIEMPO=$((END - START))
-          MINUTOS=$((TIEMPO / 60))
-          SEGUNDOS=$((TIEMPO % 60))
-          
-          echo ""
-          if [ $RESULT -eq 0 ]; then
-            echo "COMPILACION EXITOSA en ${MINUTOS}m ${SEGUNDOS}s"
-          else
-            echo "COMPILACION FALLIDA"
-            tail -50 build.log
-            exit 1
-          fi
 
-      - name: "Localizar Recovery Compilado"
+      - name: "Localizar Recovery"
         id: find_recovery
         run: |
           cd ~/orangefox_build
-          
-          echo "Buscando archivo de recovery..."
-          
           RECOVERY=$(find out -name "recovery.img" -type f 2>/dev/null | head -1)
-          
           if [ -z "$RECOVERY" ]; then
             RECOVERY=$(find out -name "*RECOVERY*.img" -type f 2>/dev/null | head -1)
           fi
-          
           if [ -n "$RECOVERY" ]; then
-            SIZE=$(du -h "$RECOVERY" | cut -f1)
             MD5=$(md5sum "$RECOVERY" | awk '{print $1}')
-            
-            echo "Recovery encontrado"
-            echo "Tamano: $SIZE"
-            echo "MD5: $MD5"
-            
             echo "recovery_file=$RECOVERY" >> $GITHUB_OUTPUT
             echo "recovery_md5=$MD5" >> $GITHUB_OUTPUT
           else
-            echo "Recovery no encontrado"
             exit 1
           fi
 
-      - name: "Preparar Artefactos"
+      - name: "Artefactos"
         run: |
           cd ~/orangefox_build
           mkdir -p artifacts
-          
           RECOVERY="${{ steps.find_recovery.outputs.recovery_file }}"
-          
           if [ -f "$RECOVERY" ]; then
             cp "$RECOVERY" artifacts/recovery.img
-            echo "recovery.img copiado"
           fi
-          
           if [ "${{ github.event.inputs.RECOVERY_TAR }}" == "true" ]; then
-            cd artifacts
-            tar -cf recovery.tar recovery.img
-            rm recovery.img
-            cd ..
-            echo "recovery.tar creado (Samsung)"
+            cd artifacts && tar -cf recovery.tar recovery.img && rm recovery.img && cd ..
           fi
-          
           if [ "${{ github.event.inputs.RECOVERY_INSTALLER }}" == "true" ]; then
             mkdir -p installer/META-INF/com/google/android
-            cat > installer/META-INF/com/google/android/updater-script << 'EOF'
-install_module() {
-  ui_print("OrangeFox Recovery");
-  package_extract_file("recovery.img", "/tmp/recovery.img");
-}
-install_module();
-EOF
+            echo "Package installed" > installer/META-INF/com/google/android/updater-script
             cp artifacts/recovery.img installer/recovery.img 2>/dev/null
-            cd installer
-            zip -r ../artifacts/recovery-installer.zip . -q
-            cd ..
-            echo "recovery-installer.zip creado"
+            cd installer && zip -r ../artifacts/recovery-installer.zip . -q && cd ..
           fi
-          
-          echo ""
-          echo "Archivos generados:"
           ls -lh artifacts/
 
-      - name: "Crear Notas de Lanzamiento"
-        id: notes
-        run: |
-          cat > /tmp/release_notes.md << 'EOF'
-          # OrangeFox Recovery - Build Automatico
-          
-          ## Informacion del Build
-          
-          - Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}
-          - Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}
-          - Build: ${{ github.run_number }}
-          
-          ## Especificaciones
-          
-          | Parametro | Valor |
-          |-----------|-------|
-          | Codename | ${{ github.event.inputs.DEVICE_CODENAME }} |
-          | Ruta | ${{ github.event.inputs.DEVICE_PATH }} |
-          | Makefile | ${{ github.event.inputs.DEVICE_MAKEFILE }} |
-          | Objetivo | ${{ github.event.inputs.BUILD_TARGET }} |
-          
-          ## Arbol
-          
-          - URL: ${{ github.event.inputs.DEVICE_TREE_URL }}
-          - Rama: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}
-          
-          ## Archivos Incluidos
-          
-          - recovery.img
-          
-          ## Instalacion
-          
-          ### Fastboot (Recomendado)
-          ```bash
-          adb reboot bootloader
-          fastboot flash recovery recovery.img
-          fastboot reboot
-          ```
-          
-          ### ADB Sideload
-          ```bash
-          adb reboot recovery
-          adb sideload recovery-installer.zip
-          ```
-          
-          Build compilado automaticamente!
-          EOF
-
-      - name: "Publicar en Releases"
+      - name: "Publicar Releases"
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ~/orangefox_build/artifacts/*
-          tag_name: orangefox-${{ github.event.inputs.DEVICE_CODENAME }}-build-${{ github.run_number }}
-          body_path: /tmp/release_notes.md
+          files: ~/orangefox_build/artifacts/*
+          tag_name: orangefox-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.run_number }}
+          body: "OrangeFox Recovery Build"
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: "Resumen Final"
+      - name: "Resumen"
         if: always()
         run: |
           echo ""
-          echo "========== BUILD COMPLETADO =========="
-          echo ""
+          echo "BUILD COMPLETADO"
           echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
-          echo "Rama OrangeFox: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
-          echo "Build: ${{ github.run_number }}"
-          echo ""
-          echo "Proximos pasos:"
-          echo "   1. Ve a: Releases"
-          echo "   2. Selecciona tu build"
-          echo "   3. Descarga: recovery.img"
-          echo "   4. Flashea en tu dispositivo"
-          echo ""
-          echo "Tu OrangeFox Recovery esta listo!"
+          echo "Estado: OK"
           echo ""
