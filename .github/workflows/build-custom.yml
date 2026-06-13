@@ -218,7 +218,9 @@ jobs:
         run: |
           export PATH=~/build/bin:$PATH
           cd ~/build
-          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q
+          git config --global url."https://github.com/".insteadOf git://github.com/
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q || \
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1
 
       - name: Sync Repository
         timeout-minutes: 120
@@ -226,7 +228,9 @@ jobs:
         run: |
           export PATH=~/build/bin:$PATH
           cd ~/build
-          ./bin/repo sync -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20
+          git config --global url."https://github.com/".insteadOf git://github.com/
+          ./bin/repo sync -j8 -c --no-tags --no-clone-bundle --force-sync 2>&1 | tail -20 || \
+          ./bin/repo sync -j4 -c --no-tags --no-clone-bundle 2>&1 | tail -20
 
       - name: Clone Device Tree
         run: |
