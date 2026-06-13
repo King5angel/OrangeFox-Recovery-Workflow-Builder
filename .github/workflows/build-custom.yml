@@ -3,6 +3,13 @@ name: Build Custom Recovery
 on:
   workflow_dispatch:
     inputs:
+      MODE:
+        description: 'Selecciona el modo'
+        required: true
+        type: choice
+        options:
+          - compile
+          - download
       DEVICE:
         description: 'Selecciona tu dispositivo'
         required: true
@@ -13,17 +20,22 @@ on:
           - samsung_d1
           - xiaomi_alioth
           - xiaomi_surya
+      RECOVERY_URL:
+        description: 'URL de recovery original (solo modo download)'
+        required: false
+        type: string
+        default: 'https://example.com/recovery.img'
       MANIFEST_BRANCH:
-        description: 'Rama de OrangeFox'
-        required: true
+        description: 'Rama de OrangeFox (solo modo compile)'
+        required: false
         type: choice
         options:
           - OrangeFox-12.1
           - OrangeFox-11
           - fox_14.1
       BUILD_TARGET:
-        description: 'Objetivo de compilacion'
-        required: true
+        description: 'Objetivo de compilacion (solo modo compile)'
+        required: false
         default: 'recovery'
         type: choice
         options:
@@ -51,7 +63,18 @@ jobs:
         id: config
         run: |
           DEVICE="${{ github.event.inputs.DEVICE }}"
+          
+          if [ ! -f "devices/devices.json" ]; then
+            echo "ERROR: devices/devices.json no encontrado"
+            exit 1
+          fi
+          
           CONFIG=$(cat devices/devices.json | jq -r ".\"$DEVICE\"")
+          
+          if [ "$CONFIG" == "null" ]; then
+            echo "ERROR: Dispositivo no encontrado: $DEVICE"
+            exit 1
+          fi
           
           DEVICE_NAME=$(echo $CONFIG | jq -r '.name')
           TREE_URL=$(echo $CONFIG | jq -r '.tree_url')
@@ -66,11 +89,12 @@ jobs:
           echo "makefile=$MAKEFILE" >> $GITHUB_OUTPUT
           
           echo ""
-          echo "Dispositivo: $DEVICE_NAME"
-          echo "Codename: $CODENAME"
-          echo "Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
+          echo "✓ Dispositivo: $DEVICE_NAME"
+          echo "✓ Codename: $CODENAME"
+          echo "✓ Modo: ${{ github.event.inputs.MODE }}"
 
-  build:
+  download-mode:
+    if: github.event.inputs.MODE == 'download'
     needs: setup
     runs-on: ubuntu-latest
     permissions:
@@ -81,10 +105,96 @@ jobs:
 
       - name: Show Info
         run: |
-          echo "Compilando para: ${{ needs.setup.outputs.device_name }}"
+          echo "===================================="
+          echo "MODO: Descargar Recovery Original"
+          echo "===================================="
+          echo ""
+          echo "Dispositivo: ${{ needs.setup.outputs.device_name }}"
+          echo "Codename: ${{ needs.setup.outputs.codename }}"
+          echo "URL: ${{ github.event.inputs.RECOVERY_URL }}"
+          echo ""
+
+      - name: Download Recovery
+        run: |
+          mkdir -p artifacts
+          echo "Descargando recovery desde:"
+          echo "${{ github.event.inputs.RECOVERY_URL }}"
+          echo ""
+          
+          curl -L -o artifacts/recovery.img "${{ github.event.inputs.RECOVERY_URL }}"
+          
+          if [ ! -f artifacts/recovery.img ]; then
+            echo "ERROR: No se pudo descargar el archivo"
+            exit 1
+          fi
+          
+          SIZE=$(du -h artifacts/recovery.img | cut -f1)
+          MD5=$(md5sum artifacts/recovery.img | awk '{print $1}')
+          
+          echo ""
+          echo "✓ Descargado exitosamente"
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ MD5: $MD5"
+          
+          echo "recovery_md5=$MD5" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/recovery.img
+          tag_name: recovery-${{ needs.setup.outputs.codename }}-download-${{ github.run_number }}
+          body: |
+            Recovery Original Descargado
+            
+            Dispositivo: ${{ needs.setup.outputs.device_name }}
+            Codename: ${{ needs.setup.outputs.codename }}
+            Modo: Descargado (Original)
+            
+            URL Original: ${{ github.event.inputs.RECOVERY_URL }}
+            MD5: ${{ env.recovery_md5 }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash recovery recovery.img
+            fastboot reboot
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary Download
+        if: always()
+        run: |
+          echo ""
+          echo "✓ Recovery Original Descargado"
+          echo "✓ Publicado en Releases"
+          echo "✓ Listo para instalar"
+          echo ""
+
+  compile-mode:
+    if: github.event.inputs.MODE == 'compile'
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Info
+        run: |
+          echo "===================================="
+          echo "MODO: Compilar Recovery Personalizado"
+          echo "===================================="
+          echo ""
+          echo "Dispositivo: ${{ needs.setup.outputs.device_name }}"
           echo "Codename: ${{ needs.setup.outputs.codename }}"
           echo "Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
           echo "Objetivo: ${{ github.event.inputs.BUILD_TARGET }}"
+          echo ""
 
       - name: Install Dependencies
         run: |
@@ -122,7 +232,7 @@ jobs:
           cd ~/build
           DEVICE_DIR="${{ needs.setup.outputs.device_path }}"
           mkdir -p "$(dirname "$DEVICE_DIR")"
-          git clone -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 "${{ needs.setup.outputs.tree_url }}" "$DEVICE_DIR"
+          git clone -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 "${{ needs.setup.outputs.tree_url }}" "$DEVICE_DIR" 2>&1 | tail -10
 
       - name: Setup Build
         run: |
@@ -151,7 +261,7 @@ jobs:
             echo "path=$RECOVERY" >> $GITHUB_OUTPUT
             echo "size=$SIZE" >> $GITHUB_OUTPUT
             echo "md5=$MD5" >> $GITHUB_OUTPUT
-            echo "Recovery encontrado: $RECOVERY ($SIZE)"
+            echo "✓ Recovery encontrado: $RECOVERY ($SIZE)"
           else
             echo "ERROR: Recovery no encontrado"
             exit 1
@@ -168,32 +278,36 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ~/build/artifacts/recovery.img
-          tag_name: recovery-${{ needs.setup.outputs.codename }}-${{ github.run_number }}
+          tag_name: recovery-${{ needs.setup.outputs.codename }}-compile-${{ github.run_number }}
           body: |
-            OrangeFox Recovery Build
+            Recovery Compilado Personalizado
             
             Dispositivo: ${{ needs.setup.outputs.device_name }}
             Codename: ${{ needs.setup.outputs.codename }}
             Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}
             Objetivo: ${{ github.event.inputs.BUILD_TARGET }}
+            Modo: Compilado (Personalizado)
             
             Tamaño: ${{ steps.recovery.outputs.size }}
             MD5: ${{ steps.recovery.outputs.md5 }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash recovery recovery.img
+            fastboot reboot
+            ```
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Summary
+      - name: Summary Compile
         if: always()
         run: |
           echo ""
-          echo "========== BUILD COMPLETADO =========="
-          echo ""
-          echo "Dispositivo: ${{ needs.setup.outputs.device_name }}"
-          echo "Rama: ${{ github.event.inputs.MANIFEST_BRANCH }}"
-          echo "Estado: Completado"
-          echo ""
-          echo "Descarga en: Releases"
+          echo "✓ Recovery Compilado Exitosamente"
+          echo "✓ Publicado en Releases"
+          echo "✓ Listo para instalar"
           echo ""
