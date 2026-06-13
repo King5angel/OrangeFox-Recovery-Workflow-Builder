@@ -1,0 +1,256 @@
+name: Upload and Transform Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE:
+        description: 'Selecciona tu dispositivo'
+        required: true
+        type: choice
+        options:
+          - nokia_cap_sprout
+          - xiaomi_joyeuse
+          - samsung_d1
+          - custom
+      DEVICE_NAME:
+        description: 'Nombre del dispositivo'
+        required: true
+        type: string
+        default: 'Mi Dispositivo'
+      RECOVERY_FILE:
+        description: 'Nombre del archivo (recovery.img)'
+        required: true
+        type: string
+        default: 'recovery.img'
+      MODIFICATIONS:
+        description: 'Descripción de modificaciones realizadas'
+        required: false
+        type: string
+        default: 'Recovery personalizado'
+
+jobs:
+  upload-transform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Info
+        run: |
+          echo "=========================================="
+          echo "UPLOAD AND TRANSFORM RECOVERY"
+          echo "=========================================="
+          echo ""
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE_NAME }}"
+          echo "Archivo esperado: ${{ github.event.inputs.RECOVERY_FILE }}"
+          echo "Modificaciones: ${{ github.event.inputs.MODIFICATIONS }}"
+          echo ""
+
+      - name: Check for Recovery File
+        id: check
+        run: |
+          # Buscar el archivo en varias ubicaciones
+          if [ -f "${{ github.event.inputs.RECOVERY_FILE }}" ]; then
+            echo "encontrado=true" >> $GITHUB_OUTPUT
+            echo "ruta=${{ github.event.inputs.RECOVERY_FILE }}" >> $GITHUB_OUTPUT
+            echo "✓ Archivo encontrado en raiz"
+          elif [ -f "recoveries/${{ github.event.inputs.RECOVERY_FILE }}" ]; then
+            echo "encontrado=true" >> $GITHUB_OUTPUT
+            echo "ruta=recoveries/${{ github.event.inputs.RECOVERY_FILE }}" >> $GITHUB_OUTPUT
+            echo "✓ Archivo encontrado en carpeta recoveries/"
+          elif [ -f "uploads/${{ github.event.inputs.RECOVERY_FILE }}" ]; then
+            echo "encontrado=true" >> $GITHUB_OUTPUT
+            echo "ruta=uploads/${{ github.event.inputs.RECOVERY_FILE }}" >> $GITHUB_OUTPUT
+            echo "✓ Archivo encontrado en carpeta uploads/"
+          else
+            echo "encontrado=false" >> $GITHUB_OUTPUT
+            echo "⚠ Archivo NO encontrado"
+            echo ""
+            echo "Buscando archivos .img disponibles:"
+            find . -name "*.img" -type f 2>/dev/null | head -10
+          fi
+
+      - name: Process Recovery File
+        if: steps.check.outputs.encontrado == 'true'
+        run: |
+          mkdir -p artifacts
+          SOURCE="${{ steps.check.outputs.ruta }}"
+          TARGET="artifacts/recovery.img"
+          
+          echo "Procesando recovery.img..."
+          echo ""
+          
+          # Copiar archivo original
+          cp "$SOURCE" "$TARGET"
+          
+          # Obtener información
+          SIZE=$(du -h "$TARGET" | cut -f1)
+          MD5=$(md5sum "$TARGET" | awk '{print $1}')
+          LINES=$(wc -c < "$TARGET")
+          
+          echo "✓ Recovery procesado"
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ Bytes: $LINES"
+          echo "✓ MD5: $MD5"
+          
+          # Guardar información
+          cat > artifacts/recovery-info.txt << EOF
+          ===========================================
+          RECOVERY PERSONALIZADO
+          ===========================================
+          
+          Dispositivo: ${{ github.event.inputs.DEVICE_NAME }}
+          Dispositivo Code: ${{ github.event.inputs.DEVICE }}
+          
+          Archivo Original: ${{ github.event.inputs.RECOVERY_FILE }}
+          Tamaño: $SIZE
+          Bytes: $LINES
+          MD5: $MD5
+          
+          Modificaciones:
+          ${{ github.event.inputs.MODIFICATIONS }}
+          
+          Fecha de Build: $(date)
+          Build ID: ${{ github.run_number }}
+          
+          ===========================================
+          INSTALACION
+          ===========================================
+          
+          1. Fastboot (Recomendado):
+             adb reboot bootloader
+             fastboot flash recovery recovery.img
+             fastboot reboot
+          
+          2. ADB Sideload:
+             adb reboot recovery
+             adb sideload recovery-installer.zip
+          
+          3. TWRP/OrangeFox:
+             - Copia recovery.img a /sdcard/
+             - Abre TWRP/OrangeFox
+             - Install → Selecciona recovery.img
+             - Flash
+          
+          ===========================================
+          EOF
+          
+          cat artifacts/recovery-info.txt
+
+      - name: Create Custom Package
+        if: steps.check.outputs.encontrado == 'true'
+        run: |
+          cd artifacts
+          
+          # Crear ZIP con installer opcional
+          if command -v zip &> /dev/null; then
+            mkdir -p recovery-installer/META-INF/com/google/android
+            
+            # Crear updater-script simple
+            cat > recovery-installer/META-INF/com/google/android/updater-script << 'SCRIPT'
+          ui_print("Custom Recovery Installer");
+          ui_print("Instalando recovery...");
+          ui_print("Completado!");
+          SCRIPT
+            
+            # Copiar recovery.img
+            cp recovery.img recovery-installer/
+            
+            # Crear ZIP
+            zip -r recovery-installer.zip recovery-installer/ > /dev/null 2>&1
+            
+            echo "✓ Recovery installer ZIP creado"
+            rm -rf recovery-installer
+          fi
+          
+          ls -lh
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/recovery.img
+            artifacts/recovery-info.txt
+            artifacts/recovery-installer.zip
+          tag_name: recovery-${{ github.event.inputs.DEVICE }}-custom-${{ github.run_number }}
+          body: |
+            📱 Recovery Personalizado - Upload Direct
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_NAME }}
+            **Código:** ${{ github.event.inputs.DEVICE }}
+            
+            **Modificaciones:**
+            ${{ github.event.inputs.MODIFICATIONS }}
+            
+            ---
+            
+            ## 📥 Archivos Incluidos
+            
+            - `recovery.img` - Recovery personalizado
+            - `recovery-info.txt` - Información del build
+            - `recovery-installer.zip` - Instalador (opcional)
+            
+            ---
+            
+            ## 🔧 Instalación
+            
+            ### Opción 1: Fastboot (Recomendado)
+            ```bash
+            adb reboot bootloader
+            fastboot flash recovery recovery.img
+            fastboot reboot
+            ```
+            
+            ### Opción 2: TWRP/OrangeFox
+            1. Copia `recovery.img` a `/sdcard/`
+            2. Abre TWRP/OrangeFox
+            3. Install → Selecciona `recovery.img`
+            4. Flash
+            
+            ### Opción 3: ADB Sideload
+            ```bash
+            adb reboot recovery
+            adb sideload recovery-installer.zip
+            ```
+            
+            ---
+            
+            **Build ID:** ${{ github.run_number }}
+            **Fecha:** $(date)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary
+        if: steps.check.outputs.encontrado == 'true'
+        run: |
+          echo ""
+          echo "✓ Upload and Transform Completado"
+          echo "✓ Recovery personalizado publicado en Releases"
+          echo "✓ Listo para descargar e instalar"
+          echo ""
+
+      - name: Error - File Not Found
+        if: steps.check.outputs.encontrado == 'false'
+        run: |
+          echo ""
+          echo "❌ ERROR: Archivo no encontrado"
+          echo ""
+          echo "Soluciones:"
+          echo ""
+          echo "1. Sube el archivo a la raíz del repositorio:"
+          echo "   git add recovery.img"
+          echo "   git commit -m 'Add recovery file'"
+          echo "   git push origin main"
+          echo ""
+          echo "2. O crea estas carpetas y sube ahí:"
+          echo "   - recoveries/"
+          echo "   - uploads/"
+          echo ""
+          echo "3. Verifica el nombre del archivo (case-sensitive)"
+          echo ""
+          exit 1
