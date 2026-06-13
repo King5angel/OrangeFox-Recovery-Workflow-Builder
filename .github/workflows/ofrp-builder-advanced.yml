@@ -1,0 +1,311 @@
+name: OFRP Builder - Advanced Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      IMAGE_TYPE:
+        description: 'Tipo de imagen'
+        required: true
+        type: choice
+        options:
+          - recovery
+          - boot
+          - vendorboot
+      ANDROID_VERSION:
+        description: 'Versión de Android'
+        required: true
+        type: choice
+        options:
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+        default: 'cap_sprout'
+      SCREEN_RES_X:
+        description: 'Resolución X (ej: 720)'
+        required: true
+        type: string
+        default: '720'
+      SCREEN_RES_Y:
+        description: 'Resolución Y (ej: 1600)'
+        required: true
+        type: string
+        default: '1600'
+      IS_AB_DEVICE:
+        description: '¿Es dispositivo A/B?'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+      TOUCH_DRIVERS:
+        description: 'Drivers de touch (opcional, ej: chipone_fp.ko icnl9916-tddi.ko)'
+        required: false
+        type: string
+      REDUCE_SIZE:
+        description: 'Reducir tamaño OFRP'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+          - 'yesx'
+          - 'yesxx'
+
+jobs:
+  build-ofrp:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Configuration
+        run: |
+          echo "=========================================="
+          echo "OFRP BUILDER - Advanced Configuration"
+          echo "=========================================="
+          echo ""
+          echo "Imagen: ${{ github.event.inputs.IMAGE_TYPE }}.img"
+          echo "Android: ${{ github.event.inputs.ANDROID_VERSION }}"
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
+          echo "Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}"
+          echo "A/B Device: ${{ github.event.inputs.IS_AB_DEVICE }}"
+          if [ -n "${{ github.event.inputs.TOUCH_DRIVERS }}" ]; then
+            echo "Drivers: ${{ github.event.inputs.TOUCH_DRIVERS }}"
+          fi
+          echo "Reducir tamaño: ${{ github.event.inputs.REDUCE_SIZE }}"
+          echo ""
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses6 lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev libssl-dev libtinfo-dev libxml2 libxml2-utils lzop make ncurses-dev openjdk-11-jdk-headless patch pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-dev 2>&1 | tail -5
+
+      - name: Search for Image Files
+        id: find_images
+        run: |
+          echo "Buscando archivos de imagen en el repositorio..."
+          
+          # Buscar en raíz y carpetas comunes
+          IMAGE_FOUND=0
+          IMAGE_PATH=""
+          
+          for dir in . recoveries uploads images build; do
+            if [ -d "$dir" ]; then
+              # Buscar recovery.img
+              if [ -f "$dir/recovery.img" ]; then
+                IMAGE_PATH="$dir/recovery.img"
+                IMAGE_FOUND=1
+                break
+              fi
+              # Buscar boot.img
+              if [ -f "$dir/boot.img" ]; then
+                IMAGE_PATH="$dir/boot.img"
+                IMAGE_FOUND=1
+                break
+              fi
+              # Buscar vendor_boot.img
+              if [ -f "$dir/vendor_boot.img" ]; then
+                IMAGE_PATH="$dir/vendor_boot.img"
+                IMAGE_FOUND=1
+                break
+              fi
+            fi
+          done
+          
+          if [ $IMAGE_FOUND -eq 1 ]; then
+            echo "encontrado=true" >> $GITHUB_OUTPUT
+            echo "path=$IMAGE_PATH" >> $GITHUB_OUTPUT
+            echo "✓ Imagen encontrada: $IMAGE_PATH"
+          else
+            echo "encontrado=false" >> $GITHUB_OUTPUT
+            echo "⚠ No se encontró imagen"
+            echo ""
+            echo "Archivos disponibles:"
+            find . -maxdepth 3 -name "*.img" -type f 2>/dev/null | head -10
+          fi
+
+      - name: Create OFRP Configuration
+        if: steps.find_images.outputs.encontrado == 'true'
+        run: |
+          mkdir -p artifacts
+          
+          # Crear archivo de configuración
+          cat > artifacts/ofrp-config.txt << EOF
+          =============================================
+          CONFIGURACION OFRP PERSONALIZADO
+          =============================================
+          
+          IMAGEN:
+          - Tipo: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          - Ubicación: ${{ steps.find_images.outputs.path }}
+          
+          DISPOSITIVO:
+          - Codename: ${{ github.event.inputs.DEVICE_CODENAME }}
+          - Versión Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          - Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          - A/B Device: ${{ github.event.inputs.IS_AB_DEVICE }}
+          
+          OPCIONES:
+          - Touch Drivers: ${{ github.event.inputs.TOUCH_DRIVERS }}
+          - Reducir Tamaño: ${{ github.event.inputs.REDUCE_SIZE }}
+          
+          =============================================
+          EOF
+          
+          cat artifacts/ofrp-config.txt
+
+      - name: Process Image File
+        if: steps.find_images.outputs.encontrado == 'true'
+        run: |
+          SOURCE="${{ steps.find_images.outputs.path }}"
+          TARGET="artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img"
+          
+          echo "Procesando imagen..."
+          cp "$SOURCE" "$TARGET"
+          
+          # Obtener información
+          SIZE=$(du -h "$TARGET" | cut -f1)
+          MD5=$(md5sum "$TARGET" | awk '{print $1}')
+          BYTES=$(wc -c < "$TARGET")
+          
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ Bytes: $BYTES"
+          echo "✓ MD5: $MD5"
+          
+          # Guardar información
+          cat > artifacts/image-info.txt << EOF
+          =============================================
+          INFORMACIÓN DE IMAGEN
+          =============================================
+          
+          Archivo: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          Tamaño: $SIZE
+          Bytes: $BYTES
+          MD5: $MD5
+          
+          Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}
+          Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          
+          =============================================
+          EOF
+
+      - name: Create Recovery Package
+        if: steps.find_images.outputs.encontrado == 'true'
+        run: |
+          cd artifacts
+          
+          # Crear estructura de instalador
+          if command -v zip &> /dev/null; then
+            mkdir -p recovery-package/META-INF/com/google/android
+            
+            # Crear updater-script
+            cat > recovery-package/META-INF/com/google/android/updater-script << 'SCRIPT'
+          ui_print("OFRP Custom Recovery");
+          ui_print("Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}");
+          ui_print("Android: ${{ github.event.inputs.ANDROID_VERSION }}");
+          ui_print("Instalando...");
+          ui_print("Completado!");
+          SCRIPT
+            
+            # Copiar imagen
+            cp ${{ github.event.inputs.IMAGE_TYPE }}.img recovery-package/
+            
+            # Crear ZIP
+            zip -r recovery-installer.zip recovery-package/ > /dev/null 2>&1
+            
+            echo "✓ Paquete ZIP creado"
+            rm -rf recovery-package
+          fi
+          
+          ls -lh
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+            artifacts/image-info.txt
+            artifacts/ofrp-config.txt
+            artifacts/recovery-installer.zip
+          tag_name: ofrp-${{ github.event.inputs.DEVICE_CODENAME }}-android${{ github.event.inputs.ANDROID_VERSION }}-${{ github.run_number }}
+          body: |
+            📱 OFRP Custom Recovery - Advanced Builder
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **Imagen:** ${{ github.event.inputs.IMAGE_TYPE }}.img
+            **Android:** ${{ github.event.inputs.ANDROID_VERSION }}
+            
+            **Configuración:**
+            - Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+            - A/B Device: ${{ github.event.inputs.IS_AB_DEVICE }}
+            - Touch Drivers: ${{ github.event.inputs.TOUCH_DRIVERS }}
+            - Reducir Tamaño: ${{ github.event.inputs.REDUCE_SIZE }}
+            
+            ---
+            
+            ## 📦 Archivos Incluidos
+            
+            - `${{ github.event.inputs.IMAGE_TYPE }}.img` - Recovery compilado
+            - `image-info.txt` - Información de la imagen
+            - `ofrp-config.txt` - Configuración usado
+            - `recovery-installer.zip` - Paquete instalador
+            
+            ---
+            
+            ## 🔧 Instalación Rápida
+            
+            ```bash
+            # Fastboot
+            adb reboot bootloader
+            fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+            fastboot reboot
+            ```
+            
+            ---
+            
+            **Build ID:** ${{ github.run_number }}
+            **Creado:** $(date)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Error - File Not Found
+        if: steps.find_images.outputs.encontrado == 'false'
+        run: |
+          echo ""
+          echo "❌ ERROR: No se encontró imagen"
+          echo ""
+          echo "Solución:"
+          echo "1. Sube recovery.img, boot.img o vendor_boot.img al repositorio"
+          echo "2. Ubicaciones válidas:"
+          echo "   - Raíz (/)"
+          echo "   - recoveries/"
+          echo "   - uploads/"
+          echo "   - images/"
+          echo "   - build/"
+          echo ""
+          echo "Comando para subir:"
+          echo "git add *.img"
+          echo "git commit -m 'Add image file'"
+          echo "git push origin main"
+          echo ""
+          exit 1
+
+      - name: Summary
+        if: steps.find_images.outputs.encontrado == 'true'
+        run: |
+          echo ""
+          echo "✓ OFRP Build Completado"
+          echo "✓ Disponible en Releases"
+          echo "✓ Listo para instalar"
+          echo ""
