@@ -198,8 +198,9 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libsdl1.2-dev libssl-dev libtinfo5 libxml2 libxml2-utils lz4 pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk-headless python3-dev
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses6 lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev libssl-dev libtinfo-dev libxml2 libxml2-utils lzop make ncurses-dev openjdk-11-jdk-headless patch pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-dev
 
       - name: Setup Build Environment
         run: |
