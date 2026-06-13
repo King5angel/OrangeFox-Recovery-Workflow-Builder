@@ -1,0 +1,153 @@
+name: Upload Recovery File
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE:
+        description: 'Selecciona tu dispositivo'
+        required: true
+        type: choice
+        options:
+          - nokia_cap_sprout
+          - xiaomi_joyeuse
+          - samsung_d1
+          - xiaomi_alioth
+          - xiaomi_surya
+          - custom
+      DEVICE_NAME:
+        description: 'Nombre del dispositivo (si es custom)'
+        required: false
+        type: string
+        default: 'Mi Dispositivo'
+      RECOVERY_NAME:
+        description: 'Nombre para el recovery (ej: mi-recovery, TWRP, OrangeFox)'
+        required: true
+        type: string
+        default: 'recovery'
+      DESCRIPTION:
+        description: 'Descripción del recovery'
+        required: false
+        type: string
+        default: 'Custom Recovery Build'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Load Device Config
+        id: config
+        run: |
+          DEVICE="${{ github.event.inputs.DEVICE }}"
+          
+          if [ "$DEVICE" == "custom" ]; then
+            DEVICE_NAME="${{ github.event.inputs.DEVICE_NAME }}"
+            CODENAME="custom"
+          else
+            if [ ! -f "devices/devices.json" ]; then
+              echo "ERROR: devices.json no encontrado"
+              exit 1
+            fi
+            
+            CONFIG=$(cat devices/devices.json | jq -r ".\"$DEVICE\"")
+            
+            if [ "$CONFIG" == "null" ]; then
+              echo "ERROR: Dispositivo no encontrado: $DEVICE"
+              exit 1
+            fi
+            
+            DEVICE_NAME=$(echo $CONFIG | jq -r '.name')
+            CODENAME=$(echo $CONFIG | jq -r '.codename')
+          fi
+          
+          echo "device_name=$DEVICE_NAME" >> $GITHUB_OUTPUT
+          echo "codename=$CODENAME" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "✓ Dispositivo: $DEVICE_NAME"
+          echo "✓ Codename: $CODENAME"
+
+      - name: Create Placeholder Recovery
+        id: create_file
+        run: |
+          mkdir -p artifacts
+          
+          # Crear archivo placeholder (simulando recovery real)
+          # En uso real, esto sería reemplazado por el archivo subido
+          
+          RECOVERY_NAME="${{ github.event.inputs.RECOVERY_NAME }}"
+          
+          # Crear archivo con contenido
+          cat > artifacts/recovery.img << 'EOF'
+          This is a placeholder recovery file.
+          Para subir tu recovery real:
+          
+          1. Descarga este placeholder
+          2. Reemplaza el contenido con tu recovery.img real
+          3. Vuelve a subir usando este workflow
+          
+          O usa las opciones alternativas en GUIA-SUBIR-RECOVERY.md
+          EOF
+          
+          SIZE=$(du -h artifacts/recovery.img | cut -f1)
+          MD5=$(md5sum artifacts/recovery.img | awk '{print $1}')
+          
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+          echo "md5=$MD5" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "✓ Archivo creado"
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ MD5: $MD5"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/recovery.img
+          tag_name: recovery-${{ steps.config.outputs.codename }}-${{ github.event.inputs.RECOVERY_NAME }}-${{ github.run_number }}
+          body: |
+            📱 Recovery Subido
+            
+            **Dispositivo:** ${{ steps.config.outputs.device_name }}
+            **Codename:** ${{ steps.config.outputs.codename }}
+            **Nombre:** ${{ github.event.inputs.RECOVERY_NAME }}
+            
+            **Información del Archivo:**
+            - Tamaño: ${{ steps.create_file.outputs.size }}
+            - MD5: ${{ steps.create_file.outputs.md5 }}
+            - Descripción: ${{ github.event.inputs.DESCRIPTION }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash recovery recovery.img
+            fastboot reboot
+            ```
+            
+            **Opciones para subir tu recovery.img:**
+            1. Descargar este archivo
+            2. Reemplazar con tu recovery real
+            3. Volver a subir
+            
+            O ver GUIA-SUBIR-RECOVERY.md para más opciones.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "✓ Release creado exitosamente"
+          echo "✓ Disponible en Releases"
+          echo "✓ Descarga y reemplaza con tu recovery real"
+          echo ""
