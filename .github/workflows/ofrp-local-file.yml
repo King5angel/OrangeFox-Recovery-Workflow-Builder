@@ -1,0 +1,175 @@
+name: OFRP Builder - Local File
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+        default: 'cap_sprout'
+      ANDROID_VERSION:
+        description: 'Versión Android'
+        required: true
+        type: choice
+        options:
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+      IMAGE_TYPE:
+        description: 'Tipo de imagen'
+        required: true
+        type: choice
+        options:
+          - recovery
+          - boot
+          - vendor_boot
+      SCREEN_RES_X:
+        description: 'Resolución X'
+        required: true
+        type: string
+        default: '720'
+      SCREEN_RES_Y:
+        description: 'Resolución Y'
+        required: true
+        type: string
+        default: '1600'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Search for Image File
+        id: find
+        run: |
+          echo "Buscando archivos .img en el repositorio..."
+          
+          # Buscar cualquier .img
+          for file in recovery.img boot.img vendor_boot.img *.img; do
+            if [ -f "$file" ]; then
+              SIZE=$(du -h "$file" | cut -f1)
+              echo "encontrado=$file" >> $GITHUB_OUTPUT
+              echo "✓ Encontrado: $file ($SIZE)"
+              break
+            fi
+          done
+          
+          if [ -z "$(grep encontrado $GITHUB_OUTPUT)" ]; then
+            echo "encontrado=false" >> $GITHUB_OUTPUT
+            echo "⚠ No se encontró archivo .img"
+            echo ""
+            echo "Archivos disponibles:"
+            find . -maxdepth 2 -type f | head -20
+          fi
+
+      - name: Process Image
+        if: steps.find.outputs.encontrado != 'false'
+        id: process
+        run: |
+          mkdir -p artifacts
+          
+          SOURCE="${{ steps.find.outputs.encontrado }}"
+          TARGET="artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img"
+          
+          echo "Procesando: $SOURCE"
+          
+          # Copiar archivo
+          cp "$SOURCE" "$TARGET"
+          
+          # Información
+          SIZE=$(du -h "$TARGET" | cut -f1)
+          MD5=$(md5sum "$TARGET" | awk '{print $1}')
+          BYTES=$(wc -c < "$TARGET")
+          
+          echo "tamaño=$SIZE" >> $GITHUB_OUTPUT
+          echo "md5=$MD5" >> $GITHUB_OUTPUT
+          echo "bytes=$BYTES" >> $GITHUB_OUTPUT
+          
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ Bytes: $BYTES"
+          echo "✓ MD5: $MD5"
+          
+          # Info file
+          cat > artifacts/info.txt << EOF
+          OFRP CUSTOM RECOVERY
+          
+          Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}
+          Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          Imagen: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          
+          Tamaño: $SIZE
+          Bytes: $BYTES
+          MD5: $MD5
+          Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          
+          Instalación:
+          adb reboot bootloader
+          fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+          fastboot reboot
+          EOF
+
+      - name: Create Release
+        if: steps.find.outputs.encontrado != 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+            artifacts/info.txt
+          tag_name: ofrp-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.run_number }}
+          body: |
+            📱 OFRP Custom Recovery
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **Imagen:** ${{ github.event.inputs.IMAGE_TYPE }}.img
+            **Android:** ${{ github.event.inputs.ANDROID_VERSION }}
+            **Resolución:** ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+            
+            **Información:**
+            - Tamaño: ${{ steps.process.outputs.tamaño }}
+            - Bytes: ${{ steps.process.outputs.bytes }}
+            - MD5: ${{ steps.process.outputs.md5 }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+            fastboot reboot
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Error - File Not Found
+        if: steps.find.outputs.encontrado == 'false'
+        run: |
+          echo ""
+          echo "❌ No se encontró archivo .img"
+          echo ""
+          echo "Instrucciones:"
+          echo ""
+          echo "1. Instala Git LFS:"
+          echo "   https://git-lfs.github.com/"
+          echo ""
+          echo "2. Configura en tu repo:"
+          echo "   git lfs install"
+          echo "   git lfs track '*.img'"
+          echo "   git add .gitattributes"
+          echo "   git commit -m 'Configure Git LFS'"
+          echo "   git push origin main"
+          echo ""
+          echo "3. Sube tu recovery.img:"
+          echo "   cp recovery.img ./recovery.img"
+          echo "   git add recovery.img"
+          echo "   git commit -m 'Add recovery image'"
+          echo "   git push origin main"
+          echo ""
+          exit 1
