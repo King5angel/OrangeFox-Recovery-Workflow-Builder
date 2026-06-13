@@ -1,0 +1,41 @@
+name: Upload File to Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Upload Instructions
+        run: |
+          echo "=========================================="
+          echo "UPLOAD FILE - Instrucciones"
+          echo "=========================================="
+          echo ""
+          echo "Este workflow permite subir archivos"
+          echo "PERO GitHub Actions no soporta upload directo"
+          echo ""
+          echo "SOLUCIONES:"
+          echo ""
+          echo "1. OPCIÓN A: Usar Formspree (Recomendado)"
+          echo "   - Abre: https://formspree.io"
+          echo "   - Crea cuenta gratis"
+          echo "   - Sube tu recovery.img"
+          echo "   - Obtén URL"
+          echo ""
+          echo "2. OPCIÓN B: Usar Base64"
+          echo "   - Convierte tu archivo a base64"
+          echo "   - Pégalo en el workflow input"
+          echo "   - Se decodifica automáticamente"
+          echo ""
+          echo "3. OPCIÓN C: Usar GitHub Upload Web"
+          echo "   - Ve a tu repositorio"
+          echo "   - Click en 'Add file' → 'Upload files'"
+          echo "   - Sube directamente desde el navegador"
+          echo ""

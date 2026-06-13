@@ -1,0 +1,168 @@
+name: OFRP Builder - Upload Base64
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+        default: 'cap_sprout'
+      ANDROID_VERSION:
+        description: 'Versión Android'
+        required: true
+        type: choice
+        options:
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+      IMAGE_TYPE:
+        description: 'Tipo de imagen'
+        required: true
+        type: choice
+        options:
+          - recovery
+          - boot
+          - vendor_boot
+      SCREEN_RES_X:
+        description: 'Resolución X (ej: 720)'
+        required: true
+        type: string
+        default: '720'
+      SCREEN_RES_Y:
+        description: 'Resolución Y (ej: 1600)'
+        required: true
+        type: string
+        default: '1600'
+      BASE64_FILE:
+        description: 'Pega aquí el archivo en Base64 (ver instrucciones abajo)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Configuration
+        run: |
+          echo "=========================================="
+          echo "OFRP Builder - Base64 Upload"
+          echo "=========================================="
+          echo ""
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}"
+          echo "Android: ${{ github.event.inputs.ANDROID_VERSION }}"
+          echo "Imagen: ${{ github.event.inputs.IMAGE_TYPE }}"
+          echo "Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}"
+          echo ""
+          echo "Decodificando archivo Base64..."
+
+      - name: Decode Base64 and Create Image
+        id: decode
+        run: |
+          mkdir -p artifacts
+          
+          # Decodificar Base64
+          echo "${{ github.event.inputs.BASE64_FILE }}" | base64 -d > artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+          
+          # Verificar que se creó
+          if [ -f artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img ]; then
+            SIZE=$(du -h artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img | cut -f1)
+            BYTES=$(wc -c < artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img)
+            MD5=$(md5sum artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img | awk '{print $1}')
+            
+            echo "tamaño=$SIZE" >> $GITHUB_OUTPUT
+            echo "bytes=$BYTES" >> $GITHUB_OUTPUT
+            echo "md5=$MD5" >> $GITHUB_OUTPUT
+            
+            echo "✓ Archivo decodificado exitosamente"
+            echo "✓ Tamaño: $SIZE"
+            echo "✓ MD5: $MD5"
+          else
+            echo "❌ Error: No se pudo decodificar el archivo"
+            exit 1
+          fi
+
+      - name: Create Configuration File
+        run: |
+          cat > artifacts/config.txt << EOF
+          =============================================
+          OFRP CUSTOM RECOVERY - CONFIGURACION
+          =============================================
+          
+          DISPOSITIVO:
+          - Codename: ${{ github.event.inputs.DEVICE_CODENAME }}
+          - Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          - Imagen: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          
+          PANTALLA:
+          - Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          
+          INFORMACIÓN DEL ARCHIVO:
+          - Tamaño: ${{ steps.decode.outputs.tamaño }}
+          - Bytes: ${{ steps.decode.outputs.bytes }}
+          - MD5: ${{ steps.decode.outputs.md5 }}
+          - Fecha: $(date)
+          
+          =============================================
+          INSTALACIÓN RÁPIDA
+          =============================================
+          
+          $ adb reboot bootloader
+          $ fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+          $ fastboot reboot
+          
+          =============================================
+          EOF
+          
+          cat artifacts/config.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+            artifacts/config.txt
+          tag_name: ofrp-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.run_number }}
+          body: |
+            📱 OFRP Custom Recovery
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **Imagen:** ${{ github.event.inputs.IMAGE_TYPE }}.img
+            **Android:** ${{ github.event.inputs.ANDROID_VERSION }}
+            **Resolución:** ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+            
+            **Información:**
+            - Tamaño: ${{ steps.decode.outputs.tamaño }}
+            - MD5: ${{ steps.decode.outputs.md5 }}
+            
+            ---
+            
+            ## 🔧 Instalación
+            
+            ```bash
+            adb reboot bootloader
+            fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+            fastboot reboot
+            ```
+            
+            ---
+            
+            **Build ID:** ${{ github.run_number }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "✓ OFRP Publicado en Releases"
+          echo "✓ Listo para descargar e instalar"
+          echo ""
