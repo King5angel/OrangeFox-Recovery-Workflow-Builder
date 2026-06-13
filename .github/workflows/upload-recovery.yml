@@ -1,0 +1,199 @@
+name: Upload Custom Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE:
+        description: 'Selecciona tu dispositivo'
+        required: true
+        type: choice
+        options:
+          - nokia_cap_sprout
+          - xiaomi_joyeuse
+          - samsung_d1
+          - xiaomi_alioth
+          - xiaomi_surya
+          - custom
+      DEVICE_NAME:
+        description: 'Nombre del dispositivo (si es custom)'
+        required: false
+        type: string
+        default: 'Mi Dispositivo'
+      RECOVERY_FILE:
+        description: 'Nombre del archivo (ej: recovery.img, TWRP.img)'
+        required: true
+        type: string
+        default: 'recovery.img'
+      DESCRIPTION:
+        description: 'Descripción (opcional)'
+        required: false
+        type: string
+        default: 'Custom Recovery Build'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load Device Config
+        id: config
+        run: |
+          DEVICE="${{ github.event.inputs.DEVICE }}"
+          
+          if [ "$DEVICE" == "custom" ]; then
+            DEVICE_NAME="${{ github.event.inputs.DEVICE_NAME }}"
+            CODENAME="custom"
+          else
+            CONFIG=$(cat devices/devices.json | jq -r ".\"$DEVICE\"")
+            DEVICE_NAME=$(echo $CONFIG | jq -r '.name')
+            CODENAME=$(echo $CONFIG | jq -r '.codename')
+          fi
+          
+          echo "device_name=$DEVICE_NAME" >> $GITHUB_OUTPUT
+          echo "codename=$CODENAME" >> $GITHUB_OUTPUT
+
+      - name: Create Upload Instructions
+        run: |
+          echo ""
+          echo "===================================="
+          echo "INSTRUCCIONES DE SUBIDA"
+          echo "===================================="
+          echo ""
+          echo "Este workflow espera que subas tu archivo."
+          echo ""
+          echo "Opciones para subir:"
+          echo ""
+          echo "1. VÍA GITHUB WEB (MÁS FÁCIL):"
+          echo "   - Ve a: Code → Crea nueva carpeta 'uploads'"
+          echo "   - Sube tu archivo ahí"
+          echo "   - Luego ejecuta este workflow de nuevo"
+          echo ""
+          echo "2. VÍA GIT (Desde tu PC):"
+          echo "   git add recovery.img"
+          echo "   git commit -m 'Upload recovery'"
+          echo "   git push origin main"
+          echo "   Luego ejecuta este workflow"
+          echo ""
+          echo "3. COMO ARTIFACT (Próximamente)"
+          echo ""
+
+      - name: Check for Recovery File
+        id: check_file
+        run: |
+          FILE="${{ github.event.inputs.RECOVERY_FILE }}"
+          
+          # Buscar en varias ubicaciones
+          if [ -f "$FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "path=$FILE" >> $GITHUB_OUTPUT
+          elif [ -f "uploads/$FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "path=uploads/$FILE" >> $GITHUB_OUTPUT
+          elif [ -f "recovery/$FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "path=recovery/$FILE" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Archivo no encontrado: $FILE"
+            echo ""
+            echo "Archivos disponibles:"
+            find . -maxdepth 3 -name "*.img" -o -name "recovery*" 2>/dev/null | head -20
+          fi
+
+      - name: Process Recovery
+        if: steps.check_file.outputs.found == 'true'
+        run: |
+          mkdir -p artifacts
+          FILE="${{ steps.check_file.outputs.path }}"
+          
+          # Copiar archivo
+          cp "$FILE" artifacts/recovery.img
+          
+          # Obtener info
+          SIZE=$(du -h artifacts/recovery.img | cut -f1)
+          MD5=$(md5sum artifacts/recovery.img | awk '{print $1}')
+          
+          echo "SIZE=$SIZE" >> $GITHUB_ENV
+          echo "MD5=$MD5" >> $GITHUB_ENV
+          
+          echo ""
+          echo "✓ Archivo procesado"
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ MD5: $MD5"
+
+      - name: Create Release
+        if: steps.check_file.outputs.found == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/recovery.img
+          tag_name: recovery-${{ steps.config.outputs.codename }}-upload-${{ github.run_number }}
+          body: |
+            Custom Recovery Subido
+            
+            Dispositivo: ${{ steps.config.outputs.device_name }}
+            Codename: ${{ steps.config.outputs.codename }}
+            Archivo: ${{ github.event.inputs.RECOVERY_FILE }}
+            
+            Tamaño: ${{ env.SIZE }}
+            MD5: ${{ env.MD5 }}
+            
+            Descripción: ${{ github.event.inputs.DESCRIPTION }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash recovery recovery.img
+            fastboot reboot
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Instructions
+        if: steps.check_file.outputs.found == 'false'
+        run: |
+          echo ""
+          echo "❌ ARCHIVO NO ENCONTRADO"
+          echo ""
+          echo "Cómo subir tu recovery.img:"
+          echo ""
+          echo "OPCIÓN 1 - GitHub Web (Recomendado):"
+          echo "1. Ve a tu repo en GitHub"
+          echo "2. Clic en Code → Add file → Upload files"
+          echo "3. Sube recovery.img"
+          echo "4. Commit"
+          echo "5. Vuelve a ejecutar este workflow"
+          echo ""
+          echo "OPCIÓN 2 - Git desde PC:"
+          echo "1. Copia recovery.img a tu carpeta del repo"
+          echo "2. git add recovery.img"
+          echo "3. git commit -m 'Upload recovery'"
+          echo "4. git push origin main"
+          echo "5. Vuelve a ejecutar este workflow"
+          echo ""
+          echo "OPCIÓN 3 - Crear carpeta uploads:"
+          echo "1. Crea carpeta 'uploads' en tu repo"
+          echo "2. Sube recovery.img ahí"
+          echo "3. Vuelve a ejecutar este workflow"
+          echo ""
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "========== ESTADO =========="
+          if [ "${{ steps.check_file.outputs.found }}" == "true" ]; then
+            echo "✓ Recovery subido exitosamente"
+            echo "✓ Publicado en Releases"
+            echo "✓ Listo para descargar"
+          else
+            echo "⚠️  Archivo no encontrado"
+            echo "✓ Sigue las instrucciones de arriba"
+          fi
+          echo ""
