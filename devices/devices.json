@@ -1,0 +1,67 @@
+{
+  "nokia_cap_sprout": {
+    "name": "Nokia Cap Sprout",
+    "codename": "cap_sprout",
+    "brand": "nokia",
+    "device_path": "device/nokia/cap_sprout",
+    "tree_url": "https://github.com/kinguser981/cap_sprout_oran",
+    "default_branch": "OrangeFox-12.1",
+    "makefile": "fox_cap_sprout.mk",
+    "supported_branches": ["OrangeFox-12.1", "OrangeFox-11"],
+    "architecture": "arm64",
+    "android_version": "12",
+    "notes": "Works with OrangeFox 12.1"
+  },
+  "xiaomi_joyeuse": {
+    "name": "Xiaomi Redmi Note 9 Pro",
+    "codename": "joyeuse",
+    "brand": "xiaomi",
+    "device_path": "device/xiaomi/joyeuse",
+    "tree_url": "https://github.com/usuario/xiaomi-joyeuse",
+    "default_branch": "OrangeFox-12.1",
+    "makefile": "AndroidProducts.mk",
+    "supported_branches": ["OrangeFox-12.1"],
+    "architecture": "arm64",
+    "android_version": "12",
+    "notes": "Cambiar tree_url a tu repositorio"
+  },
+  "samsung_d1": {
+    "name": "Samsung Galaxy S10",
+    "codename": "d1",
+    "brand": "samsung",
+    "device_path": "device/samsung/d1",
+    "tree_url": "https://github.com/usuario/samsung-s10",
+    "default_branch": "fox_13.0",
+    "makefile": "AndroidProducts.mk",
+    "supported_branches": ["fox_13.0"],
+    "architecture": "arm64",
+    "android_version": "13",
+    "notes": "Samsung - Cambiar tree_url"
+  },
+  "xiaomi_alioth": {
+    "name": "Xiaomi Poco F3",
+    "codename": "alioth",
+    "brand": "xiaomi",
+    "device_path": "device/xiaomi/alioth",
+    "tree_url": "https://github.com/usuario/poco-f3",
+    "default_branch": "OrangeFox-12.1",
+    "makefile": "AndroidProducts.mk",
+    "supported_branches": ["OrangeFox-12.1"],
+    "architecture": "arm64",
+    "android_version": "12",
+    "notes": "Poco F3"
+  },
+  "xiaomi_surya": {
+    "name": "Xiaomi Poco X3",
+    "codename": "surya",
+    "brand": "xiaomi",
+    "device_path": "device/poco/surya",
+    "tree_url": "https://github.com/usuario/poco-x3",
+    "default_branch": "OrangeFox-12.1",
+    "makefile": "AndroidProducts.mk",
+    "supported_branches": ["OrangeFox-12.1"],
+    "architecture": "arm64",
+    "android_version": "12",
+    "notes": "Poco X3"
+  }
+}
