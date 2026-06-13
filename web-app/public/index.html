@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OFRP Builder - Web Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        input[type="file"] {
+            padding: 8px;
+            cursor: pointer;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+            text-align: center;
+        }
+
+        .file-input-label:hover {
+            background: #764ba2;
+        }
+
+        .file-info {
+            color: #666;
+            font-size: 13px;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+
+        .link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 OFRP Builder</h1>
+            <p>Sube tu recovery.img y personaliza</p>
+        </div>
+
+        <form id="uploadForm">
+            <!-- Dispositivo -->
+            <div class="form-group">
+                <label for="device">Dispositivo</label>
+                <input type="text" id="device" name="device_codename" value="cap_sprout" required>
+            </div>
+
+            <!-- Android Version -->
+            <div class="form-group">
+                <label for="android">Versión Android</label>
+                <select id="android" name="android_version" required>
+                    <option value="12">Android 12</option>
+                    <option value="13">Android 13</option>
+                    <option value="14">Android 14</option>
+                    <option value="15">Android 15</option>
+                </select>
+            </div>
+
+            <!-- Tipo de Imagen -->
+            <div class="form-group">
+                <label for="imageType">Tipo de Imagen</label>
+                <select id="imageType" name="image_type" required>
+                    <option value="recovery">recovery.img</option>
+                    <option value="boot">boot.img</option>
+                    <option value="vendor_boot">vendor_boot.img</option>
+                </select>
+            </div>
+
+            <!-- Resolución -->
+            <div class="form-group">
+                <label>Resolución de Pantalla</label>
+                <div class="form-row">
+                    <div>
+                        <input type="number" name="screen_res_x" placeholder="Ancho (X)" value="720" required>
+                    </div>
+                    <div>
+                        <input type="number" name="screen_res_y" placeholder="Alto (Y)" value="1600" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload -->
+            <div class="form-group">
+                <label>Archivo de Imagen</label>
+                <div class="file-input-wrapper">
+                    <label for="recovery_file" class="file-input-label">
+                        📁 Selecciona archivo (.img)
+                    </label>
+                    <input type="file" id="recovery_file" name="recovery_file" accept=".img" required style="display: none;">
+                </div>
+                <div class="file-info" id="fileInfo">Ningún archivo seleccionado</div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit">🚀 Procesar Recovery</button>
+
+            <!-- Loading -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Procesando tu archivo...</p>
+            </div>
+
+            <!-- Messages -->
+            <div class="message" id="message"></div>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('recovery_file');
+        const fileInfo = document.getElementById('fileInfo');
+        const loading = document.getElementById('loading');
+        const message = document.getElementById('message');
+
+        // Mostrar info del archivo seleccionado
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                fileInfo.textContent = `✓ ${file.name} (${sizeMB} MB)`;
+            } else {
+                fileInfo.textContent = 'Ningún archivo seleccionado';
+            }
+        });
+
+        // Submit
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!fileInput.files.length) {
+                showMessage('Por favor selecciona un archivo', 'error');
+                return;
+            }
+
+            loading.style.display = 'block';
+            message.style.display = 'none';
+
+            try {
+                const formData = new FormData(form);
+                
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                loading.style.display = 'none';
+
+                if (response.ok) {
+                    showMessage(
+                        `✓ Éxito! Tu recovery se está procesando.<br><a href="${data.check_url}" class="link" target="_blank">Ver en GitHub Actions →</a>`,
+                        'success'
+                    );
+                    form.reset();
+                    fileInfo.textContent = 'Ningún archivo seleccionado';
+                } else {
+                    showMessage(data.error || 'Error desconocido', 'error');
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showMessage('Error: ' + error.message, 'error');
+            }
+        });
+
+        function showMessage(text, type) {
+            message.className = `message ${type}`;
+            message.innerHTML = text;
+            message.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

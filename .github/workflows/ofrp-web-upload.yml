@@ -1,0 +1,127 @@
+name: OFRP Builder - Web Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+      ANDROID_VERSION:
+        description: 'Versión Android'
+        required: true
+        type: string
+      IMAGE_TYPE:
+        description: 'Tipo de imagen'
+        required: true
+        type: string
+      SCREEN_RES_X:
+        description: 'Resolución X'
+        required: true
+        type: string
+      SCREEN_RES_Y:
+        description: 'Resolución Y'
+        required: true
+        type: string
+      BASE64_FILE:
+        description: 'Archivo en Base64'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode Base64 Image
+        id: decode
+        run: |
+          mkdir -p artifacts
+          
+          # Decodificar Base64
+          echo "${{ github.event.inputs.BASE64_FILE }}" | base64 -d > artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+          
+          # Verificar
+          if [ -f artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img ]; then
+            SIZE=$(du -h artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img | cut -f1)
+            BYTES=$(wc -c < artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img)
+            MD5=$(md5sum artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img | awk '{print $1}')
+            
+            echo "tamaño=$SIZE" >> $GITHUB_OUTPUT
+            echo "bytes=$BYTES" >> $GITHUB_OUTPUT
+            echo "md5=$MD5" >> $GITHUB_OUTPUT
+            
+            echo "✓ Decodificado correctamente"
+            echo "✓ Tamaño: $SIZE"
+            echo "✓ MD5: $MD5"
+          else
+            echo "❌ Error decodificando"
+            exit 1
+          fi
+
+      - name: Create Configuration
+        run: |
+          cat > artifacts/config.txt << EOF
+          OFRP CUSTOM RECOVERY
+          ================================================
+          
+          Dispositivo:
+          - Codename: ${{ github.event.inputs.DEVICE_CODENAME }}
+          - Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          - Pantalla: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          
+          Imagen:
+          - Tipo: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          - Tamaño: ${{ steps.decode.outputs.tamaño }}
+          - Bytes: ${{ steps.decode.outputs.bytes }}
+          - MD5: ${{ steps.decode.outputs.md5 }}
+          
+          Fecha: $(date)
+          
+          ================================================
+          
+          INSTALACIÓN:
+          
+          $ adb reboot bootloader
+          $ fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+          $ fastboot reboot
+          
+          ================================================
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+            artifacts/config.txt
+          tag_name: ofrp-web-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.run_number }}
+          body: |
+            📱 OFRP Custom Recovery - Web Builder
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **Imagen:** ${{ github.event.inputs.IMAGE_TYPE }}.img
+            **Android:** ${{ github.event.inputs.ANDROID_VERSION }}
+            **Resolución:** ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+            
+            **Información:**
+            - Tamaño: ${{ steps.decode.outputs.tamaño }}
+            - MD5: ${{ steps.decode.outputs.md5 }}
+            
+            ---
+            
+            ## Instalación
+            
+            ```bash
+            adb reboot bootloader
+            fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+            fastboot reboot
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
