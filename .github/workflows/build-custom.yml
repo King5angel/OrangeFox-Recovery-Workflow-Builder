@@ -219,8 +219,8 @@ jobs:
           export PATH=~/build/bin:$PATH
           cd ~/build
           git config --global url."https://github.com/".insteadOf git://github.com/
-          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q || \
-          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q || \
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1
 
       - name: Sync Repository
         timeout-minutes: 120
