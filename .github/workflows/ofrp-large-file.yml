@@ -1,0 +1,193 @@
+name: OFRP Builder - Large File Upload (Comprimido)
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+        default: 'cap_sprout'
+      ANDROID_VERSION:
+        description: 'Versión Android'
+        required: true
+        type: choice
+        options:
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+      IMAGE_TYPE:
+        description: 'Tipo de imagen'
+        required: true
+        type: choice
+        options:
+          - recovery
+          - boot
+          - vendor_boot
+      SCREEN_RES_X:
+        description: 'Resolución X'
+        required: true
+        type: string
+        default: '720'
+      SCREEN_RES_Y:
+        description: 'Resolución Y'
+        required: true
+        type: string
+        default: '1600'
+      COMPRESSED_FILE_URL:
+        description: 'URL del archivo COMPRIMIDO (recovery.tar.gz o recovery.zip de Google Drive)'
+        required: true
+        type: string
+        placeholder: 'https://drive.google.com/uc?export=download&id=...'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Compressed File
+        run: |
+          echo "Descargando archivo comprimido..."
+          
+          mkdir -p artifacts
+          cd artifacts
+          
+          # Descargar
+          curl -L -o recovery-compressed "${{ github.event.inputs.COMPRESSED_FILE_URL }}" 2>&1 | tail -20
+          
+          # Verificar descarga
+          if [ -f recovery-compressed ]; then
+            SIZE=$(du -h recovery-compressed | cut -f1)
+            echo "✓ Descargado: $SIZE"
+          else
+            echo "❌ Error descargando"
+            exit 1
+          fi
+
+      - name: Extract File
+        run: |
+          cd artifacts
+          
+          echo "Extrayendo archivo..."
+          
+          # Detectar tipo
+          file recovery-compressed
+          
+          # Intentar descomprimir
+          if tar -tzf recovery-compressed > /dev/null 2>&1; then
+            tar -xzf recovery-compressed
+            echo "✓ Extraído: .tar.gz"
+          elif unzip -t recovery-compressed > /dev/null 2>&1; then
+            unzip -q recovery-compressed
+            echo "✓ Extraído: .zip"
+          else
+            echo "❌ Formato no soportado (debe ser .tar.gz o .zip)"
+            exit 1
+          fi
+          
+          # Buscar recovery.img
+          if [ -f recovery.img ]; then
+            echo "✓ recovery.img encontrado"
+          elif [ -f "boot.img" ]; then
+            echo "✓ boot.img encontrado"
+          elif [ -f "vendor_boot.img" ]; then
+            echo "✓ vendor_boot.img encontrado"
+          else
+            echo "⚠ Archivos disponibles:"
+            find . -name "*.img" -type f 2>/dev/null
+          fi
+
+      - name: Process Image
+        id: process
+        run: |
+          cd artifacts
+          
+          # Buscar imagen
+          IMG_FILE=""
+          for file in recovery.img boot.img vendor_boot.img; do
+            if [ -f "$file" ]; then
+              IMG_FILE="$file"
+              break
+            fi
+          done
+          
+          if [ -z "$IMG_FILE" ]; then
+            echo "❌ No se encontró imagen"
+            exit 1
+          fi
+          
+          # Procesar
+          cp "$IMG_FILE" "${{ github.event.inputs.IMAGE_TYPE }}.img"
+          
+          SIZE=$(du -h "${{ github.event.inputs.IMAGE_TYPE }}.img" | cut -f1)
+          MD5=$(md5sum "${{ github.event.inputs.IMAGE_TYPE }}.img" | awk '{print $1}')
+          
+          echo "tamaño=$SIZE" >> $GITHUB_OUTPUT
+          echo "md5=$MD5" >> $GITHUB_OUTPUT
+          
+          echo "✓ Procesado"
+          echo "✓ Tamaño: $SIZE"
+          echo "✓ MD5: $MD5"
+          
+          # Limpiar archivos temporales
+          rm -f recovery-compressed recovery.img boot.img vendor_boot.img *.tar.gz *.zip 2>/dev/null
+          
+          # Crear info
+          cat > info.txt << EOF
+          OFRP CUSTOM RECOVERY
+          
+          Dispositivo: ${{ github.event.inputs.DEVICE_CODENAME }}
+          Android: ${{ github.event.inputs.ANDROID_VERSION }}
+          Imagen: ${{ github.event.inputs.IMAGE_TYPE }}.img
+          
+          Tamaño: $SIZE
+          MD5: $MD5
+          Resolución: ${{ github.event.inputs.SCREEN_RES_X }}x${{ github.event.inputs.SCREEN_RES_Y }}
+          
+          Instalación:
+          adb reboot bootloader
+          fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+          fastboot reboot
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/${{ github.event.inputs.IMAGE_TYPE }}.img
+            artifacts/info.txt
+          tag_name: ofrp-${{ github.event.inputs.DEVICE_CODENAME }}-${{ github.run_number }}
+          body: |
+            📱 OFRP Custom Recovery - Large File
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **Imagen:** ${{ github.event.inputs.IMAGE_TYPE }}.img
+            **Android:** ${{ github.event.inputs.ANDROID_VERSION }}
+            
+            **Información:**
+            - Tamaño: ${{ steps.process.outputs.tamaño }}
+            - MD5: ${{ steps.process.outputs.md5 }}
+            
+            **Instalación:**
+            ```bash
+            adb reboot bootloader
+            fastboot flash ${{ github.event.inputs.IMAGE_TYPE }} ${{ github.event.inputs.IMAGE_TYPE }}.img
+            fastboot reboot
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "✓ OFRP Publicado en Releases"
+          echo "✓ Listo para descargar"
+          echo ""
