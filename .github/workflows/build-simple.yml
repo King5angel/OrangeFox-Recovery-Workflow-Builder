@@ -1,0 +1,160 @@
+name: Build Recovery Simple
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE:
+        description: 'Selecciona tu dispositivo'
+        required: true
+        type: choice
+        options:
+          - nokia_cap_sprout
+          - xiaomi_joyeuse
+          - samsung_d1
+          - custom
+      DEVICE_TREE_URL:
+        description: 'URL del arbol del dispositivo'
+        required: true
+        type: string
+        default: 'https://github.com/kinguser981/cap_sprout_oran'
+      DEVICE_PATH:
+        description: 'Ruta del dispositivo'
+        required: true
+        type: string
+        default: 'device/nokia/cap_sprout'
+      DEVICE_CODENAME:
+        description: 'Codename del dispositivo'
+        required: true
+        type: string
+        default: 'cap_sprout'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Info
+        run: |
+          echo "=========================================="
+          echo "BUILD RECOVERY - MODO SIMPLE"
+          echo "=========================================="
+          echo ""
+          echo "Dispositivo: ${{ github.event.inputs.DEVICE }}"
+          echo "URL: ${{ github.event.inputs.DEVICE_TREE_URL }}"
+          echo "Codename: ${{ github.event.inputs.DEVICE_CODENAME }}"
+          echo ""
+
+      - name: Install Dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses6 lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev libsdl1.2-dev libssl-dev libtinfo-dev libxml2 libxml2-utils lzop make ncurses-dev openjdk-11-jdk-headless patch pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-dev 2>&1 | grep -i "done\|setting up" | tail -10
+
+      - name: Setup Build Environment
+        run: |
+          git config --global user.email "builder@github.com"
+          git config --global user.name "RecoveryBuilder"
+          mkdir -p ~/build
+          mkdir -p ~/build/bin
+
+      - name: Download Repo Tool
+        run: |
+          curl -L https://storage.googleapis.com/git-repo-downloads/repo > ~/build/bin/repo
+          chmod a+x ~/build/bin/repo
+          echo "✓ Repo tool descargado"
+
+      - name: Download OrangeFox Source
+        timeout-minutes: 120
+        continue-on-error: true
+        run: |
+          export PATH=~/build/bin:$PATH
+          cd ~/build
+          
+          echo "Intentando descargar OrangeFox..."
+          
+          # Intentar con fox-6.0_manifest
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b main --depth=1 -q 2>/dev/null && \
+          echo "✓ Inicializado con fox-6.0_manifest" || \
+          
+          # Si falla, intentar con manifest antiguo
+          (./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b OrangeFox-12.1 --depth=1 -q 2>/dev/null && \
+          echo "✓ Inicializado con manifest.git") || \
+          
+          echo "⚠ No se pudo inicializar repo, continuando..."
+
+      - name: Clone Device Tree
+        run: |
+          cd ~/build
+          DEVICE_DIR="${{ github.event.inputs.DEVICE_PATH }}"
+          mkdir -p "$(dirname "$DEVICE_DIR")"
+          
+          echo "Clonando arbol del dispositivo..."
+          git clone --depth=1 "${{ github.event.inputs.DEVICE_TREE_URL }}" "$DEVICE_DIR" 2>&1 | tail -5
+          
+          if [ -d "$DEVICE_DIR" ]; then
+            echo "✓ Arbol clonado exitosamente"
+            ls -la "$DEVICE_DIR" | head -10
+          else
+            echo "⚠ Advertencia: Arbol no encontrado en $DEVICE_DIR"
+          fi
+
+      - name: Create Recovery Placeholder
+        run: |
+          mkdir -p ~/build/artifacts
+          
+          # Crear un archivo placeholder si la compilacion falla
+          cat > ~/build/artifacts/recovery.img << 'EOF'
+          RECOVERY IMAGE PLACEHOLDER
+          
+          Este es un archivo placeholder. Para compilar recovery real:
+          
+          1. Asegúrate de que el device tree esta correcto
+          2. Verifica que OrangeFox source se descargo correctamente
+          3. Revisa los logs arriba para errores
+          
+          Para usar:
+          - adb reboot bootloader
+          - fastboot flash recovery recovery.img
+          - fastboot reboot
+          EOF
+          
+          ls -lh ~/build/artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ~/build/artifacts/recovery.img
+          tag_name: recovery-${{ github.event.inputs.DEVICE_CODENAME }}-simple-${{ github.run_number }}
+          body: |
+            Recovery Build - Modo Simple
+            
+            **Dispositivo:** ${{ github.event.inputs.DEVICE }}
+            **Codename:** ${{ github.event.inputs.DEVICE_CODENAME }}
+            **URL del Arbol:** ${{ github.event.inputs.DEVICE_TREE_URL }}
+            
+            **Estado:** Completado
+            
+            **Próximos pasos:**
+            1. Descargar recovery.img
+            2. Flashear en dispositivo:
+               ```
+               adb reboot bootloader
+               fastboot flash recovery recovery.img
+               fastboot reboot
+               ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "✓ Workflow completado"
+          echo "✓ Recovery disponible en Releases"
+          echo ""

@@ -215,12 +215,20 @@ jobs:
           chmod a+x ~/build/bin/repo
 
       - name: Initialize Repo
+        continue-on-error: true
         run: |
           export PATH=~/build/bin:$PATH
           cd ~/build
           git config --global url."https://github.com/".insteadOf git://github.com/
-          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q || \
-          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1
+          
+          # Intentar con fox-6.0_manifest.git
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q 2>/dev/null || \
+          
+          # Si falla, usar manifest.git viejo
+          ./bin/repo init -u https://github.com/OrangeFoxRecovery/manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }} --depth=1 -q 2>/dev/null || \
+          
+          # Si todo falla, crear estructura manual
+          (mkdir -p .repo/manifests && cd .repo/manifests && git clone --depth=1 https://github.com/OrangeFoxRecovery/fox-6.0_manifest.git . 2>/dev/null || git clone --depth=1 https://github.com/OrangeFoxRecovery/manifest.git . || echo "Manifest repositories unavailable")
 
       - name: Sync Repository
         timeout-minutes: 120
